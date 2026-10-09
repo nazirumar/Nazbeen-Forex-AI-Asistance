@@ -86,9 +86,8 @@ The command exits non-zero on misconfiguration or provider failure and never pri
 
 ## 6. Explicitly not done (honest boundaries)
 
-- **No real provider call was made in this phase** — this environment has no OpenAI/Gemini
-  keys; all 55 tests use fake sessions/scripted providers, and nothing here claims verified
-  live-provider behavior. The smoke command exists precisely so the owner can verify it.
+- **No real provider call was made *during implementation*** — corrected by the owner-directed
+  live verification on 2026-10-09 (§8): real Google Gemini calls now verified for both roles.
 - **LangGraph orchestration is not implemented** (H-03's other half) — master spec still
   requires it; awaiting the owner decision recorded in ADR-011.
 - **H-04 symbol/timeframe defaults (`EURUSD`/`M15`) were not changed** — out of this scope;
@@ -104,3 +103,34 @@ uv run python manage.py makemigrations --check --dry-run
 uv run pytest
 uv run pytest docs/audits/repro    # 15/15 audit repros still pass
 ```
+
+## 8. Live real-provider verification (2026-10-09, owner-directed)
+
+After implementation, the owner configured real credentials in `.env` (Google Gemini) and
+requested a live check. Results — real Google Gemini API, no mocks:
+
+- **Config findings fixed:** `gemini-2.5-flash` returned **HTTP 404** — Google has retired it
+  for these keys ("use models/gemini-3.8-flash"). `.env` updated to `gemini-3.8-flash`,
+  `USE_MOCK_LLM=false` added (it was missing, i.e. mock was still the default), and transport
+  knobs raised to observed reality (`LLM_TIMEOUT_SECONDS=180`, backoff 5 s). API keys were
+  never printed, logged, or echoed in any error.
+- **Reasoning smoke:** HTTP 200, 12.3 s, schema-valid JSON, exit 0.
+- **Vision smoke:** HTTP 200, 128 s under Google demand; summary correctly identified the
+  input as a synthetic test chart with **zero fabricated price levels** (`candidate_levels=0`,
+  `observed_symbol=None` — no axes were legible). The input image was synthetic (labeled as
+  such on the image itself; no real chart was available) and is only an input fixture — not
+  market data.
+- **Transient 503s observed** ("high demand"): the transport retried with backoff exactly as
+  designed; when retries were exhausted the failure surfaced in `errors` with exit 1 (smoke) /
+  analysis-continues-deterministic-only (pipeline) — never a silent mock. One e2e run
+  captured this failure path live (vision 503 ×3 → loud `errors` entry, `model` credited only
+  the successful reasoning role).
+- **End-to-end `analyze()` (both roles live, real MT5 data):** `source=mt5`,
+  `decision=SELL` from the deterministic engine while the vision model read the chart
+  **bullish** → recorded as a direction disagreement, `resolved=True` (deterministic
+  retained); evidence = 3 deterministic + 3 AI-tagged; `entry_levels=[] sl=None tp=None`;
+  `model=vision=gemini/gemini-3.8-flash, reasoning=gemini/gemini-3.8-flash`.
+
+Honest boundaries: verification used Google Gemini only (no OpenAI key available), latency is
+provider/load-dependent (up to ~2 min per call observed), and no claim is made about OpenAI
+behavior beyond its unit-tested adapter paths.

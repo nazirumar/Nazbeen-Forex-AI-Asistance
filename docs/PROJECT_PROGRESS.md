@@ -98,9 +98,11 @@
 - Redis channel layer (`USE_REDIS_CHANNELS=true`) configured but only the in-memory layer is tested.
 - CI workflow not yet executed on GitHub (runs locally-verified commands).
 
-- No real LLM provider call has been executed from this environment (no OpenAI/Gemini API keys); every real-provider code path is covered by mocked-transport tests only. Verify live with `manage.py llm_smoke` and real keys (see `docs/TESTING.md`).
+- Real-provider LLM behavior is verified only for Google Gemini (`gemini-3.8-flash`, live-tested 2026-10-09); OpenAI adapter paths remain unit-tested only. Google retires models without notice (`gemini-2.5-flash` now → HTTP 404) — keep `*_LLM_MODEL` current.
 
 ## Test status
+
+- Live LLM verification (Phase 11B, 2026-10-09): real Gemini reasoning + vision HTTP 200 via `manage.py llm_smoke`; end-to-end `analyze()` with real MT5 data → deterministic SELL retained over a bullish LLM reading (disagreement recorded, `resolved=True`); transient Google 503s surfaced loudly in `errors`, never mocked.
 
 - `uv run pytest` → **200 passed, 0 failed** (2026-10-09, Phase 11B (55 new LLM tests); ~14 s — hermetic mock-only)
 - `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated)

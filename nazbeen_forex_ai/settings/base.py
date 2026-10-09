@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
+    "channels",
     # Project apps
     "nazbeen_forex_ai.core",
     "nazbeen_forex_ai.accounts",
@@ -147,6 +148,29 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_TRACK_STARTED = True
+# Named queues (Roadmap Phase 10): heavy work (backtests, evaluations) must not
+# starve lightweight tasks. Routing keeps default tasks on "default".
+CELERY_TASK_QUEUES = {
+    "default": {"exchange": "default", "routing_key": "default"},
+    "heavy": {"exchange": "heavy", "routing_key": "heavy"},
+}
+CELERY_TASK_ROUTES = {
+    "nazbeen_forex_ai.backtesting.*": {"queue": "heavy"},
+}
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # fairness for long-running backtests
+
+# --- Channels (WebSockets) -------------------------------------------------
+
+ASGI_APPLICATION = "nazbeen_forex_ai.asgi.application"
+
+if env_bool("USE_REDIS_CHANNELS", False):
+    CHANNEL_LAYERS = {
+        "default": {"BACKEND": "channels_redis.core.RedisChannelLayer",
+                    "CONFIG": {"hosts": [REDIS_URL]}},
+    }
+else:
+    # In-memory layer: development and tests (no external dependency).
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 # --- CORS (frontend dev server) -------------------------------------------
 
@@ -216,24 +240,37 @@ REST_FRAMEWORK = {
 # --- Logging --------------------------------------------------------------
 
 LOG_LEVEL = env_str("LOG_LEVEL", "INFO") or "INFO"
+# "text" = key=value lines (default), "json" = one JSON object per line.
+LOG_FORMAT = (env_str("LOG_FORMAT", "text") or "text").lower()
+
+_CONSOLE_FORMATTER = "structured" if LOG_FORMAT != "json" else "json"
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
         "structured": {
-            # Machine-readable key=value structure (Phase 10 extends this to JSON).
+            # Machine-readable key=value structure.
             "format": (
                 "%(asctime)s level=%(levelname)s logger=%(name)s "
                 "message=%(message)s"
             ),
             "datefmt": "%Y-%m-%dT%H:%M:%SZ",
         },
+        "json": {
+            "()": "nazbeen_forex_ai.core.logging_extras.JsonFormatter",
+        },
+    },
+    "filters": {
+        # Defense-in-depth: mask credentials/token patterns in every record
+        # (MASTER_SPEC §7 — never expose API keys or credentials in logs).
+        "redact": {"()": "nazbeen_forex_ai.core.logging_extras.SecretRedactionFilter"},
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "structured",
+            "formatter": _CONSOLE_FORMATTER,
+            "filters": ["redact"],
         },
     },
     "root": {

@@ -1,0 +1,22 @@
+# Build-context exclusions (keep images small and secret-free).
+.git
+.venv
+.env
+__pycache__/
+*.pyc
+*.log
+logs/
+db.sqlite3
+staticfiles/
+media/
+screenshots/
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/
+frontend/node_modules/
+frontend/.next/
+docs/
+.github/
+AGENTS.md
+*.md

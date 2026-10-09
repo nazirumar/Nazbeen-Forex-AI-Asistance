@@ -111,6 +111,12 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 | `GET` | `/api/journal/search/?q=` | Search the caller's own entries. |
 | `POST` | `/api/mentor/ask/` | Context-aware mentor answer; references only the caller's saved analyses. |
 
+### WebSocket (Phase 10 — read-only operational status)
+
+| Protocol | Path | Notes |
+|---|---|---|
+| `ws` | `/ws/status/` | On connect: pushes the same public health snapshot as `GET /api/health/` (database/cache/celery checks, version, UTC time — no secrets). Accepts exactly one client action: `{"action": "ping"}` → `{"type": "pong", "time": ...}`. Any other message → `{"type": "error", ...}`. **No commands, no trading actions — read-only by design.** Requires an ASGI server (daphne/`runserver`); in-memory channel layer by default, Redis when `USE_REDIS_CHANNELS=true`. |
+
 ## Planned endpoints (not yet implemented)
 
 | Endpoint | Purpose |
@@ -121,4 +127,3 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 | Journal export endpoints | CSV/PDF journal reports |
 
 > Each phase updates this file in the same commit as the endpoints it adds.
-> (Note: as of Phase 9 the repository has **no git commits yet** — all changes are uncommitted.)

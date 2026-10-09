@@ -3,6 +3,12 @@
 **Date:** 2026-10-09  
 **Status:** ✅ Release review complete (analysis-only) — awaiting approval
 
+> **Addendum (2026-10-09, Phase 10):** after this report, Roadmap Phase 10 (infra & ops) was
+> implemented: JSON logging + secret redaction, `ws/status/` WebSocket, Celery queues, Docker
+> stack configs, production hardening, e2e tests, `docs/OPERATIONS.md`. Test count is now
+> **78 passed**. Repository baseline committed as `dbe7fba`, Phase 10 code as `5fb5408`.
+> See `docs/PHASE_REPORTS/PHASE_10.md`. Figures below are as-of Phase 9.
+
 ## 1. Executive summary
 All core phases (1-8) implemented. Tests: 67 passed (Django pytest). Django checks and migrations OK. Frontend typecheck OK. App is analysis-only; no live order execution.
 

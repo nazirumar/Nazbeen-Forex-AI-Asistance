@@ -5,7 +5,7 @@
 
 ## Current phase
 
-**Phase 9 — Final Integration, Security Review and Demo Release** ✅ completed 2026-10-09 — **awaiting owner approval before next phase/closure**
+**Phase 10 — Infra & Ops (Roadmap Phase 10, the final roadmap phase)** ✅ completed 2026-10-09 — **awaiting owner approval before next work**
 
 ## Completed phases
 
@@ -20,6 +20,7 @@
 | 7 | Trading Journal, Analysis Memory and AI Trading Mentor | `docs/PHASE_REPORTS/PHASE_07.md` | 2026-10-08 |
 | 8 | Professional Trading Dashboard and User Experience | `docs/PHASE_REPORTS/PHASE_08.md` | 2026-10-08 |
 | 9 | Final Integration, Security Review and Demo Release | `docs/PHASE_REPORTS/PHASE_09.md` + `docs/FINAL_RELEASE_REPORT.md` | 2026-10-09 |
+| 10 | Infra & Ops (Roadmap Phase 10) | `docs/PHASE_REPORTS/PHASE_10.md` | 2026-10-09 |
 
 ## Completed features
 
@@ -36,9 +37,11 @@
   resilient rate limiting (ADR-008) so throttled endpoints don't 500 when Redis is down.
 - Next.js 15 frontend (TypeScript + Tailwind): dashboard shell, auth panel, health/status cards,
   direct-backend API helper (CORS), frontend `/api/health` probe. Builds/typechecks clean.
-- Test harness: pytest + pytest-django, **67 tests passing** (2026-10-09, full suite).
+- Test harness: pytest + pytest-django, **78 tests passing** (2026-10-09, full suite).
 - CI workflow (`.github/workflows/ci.yml`): backend (`check`, `makemigrations --check --dry-run`, `pytest`) + frontend (`npm ci`, `typecheck`, `build`).
-- Dev tooling: `docker-compose.yml` (Postgres + Redis), PowerShell scripts (`scripts/start-infra.ps1`, `scripts/dev-backend.ps1`, `scripts/dev-frontend.ps1`, `scripts/test-all.ps1`), Windows 11 run guidance.
+- Dev tooling: `docker-compose.yml` (Postgres + Redis, plus an `app` profile adding
+  backend/worker/frontend containers), PowerShell scripts (`scripts/start-infra.ps1`,
+  `scripts/dev-backend.ps1`, `scripts/dev-frontend.ps1`, `scripts/test-all.ps1`), Windows 11 run guidance.
 - uv dependency management with committed `uv.lock`.
 - **Phase 2 — MT5 data layer**: `marketdata` app with `MarketDataProvider` interface, labeled mock
   provider (`mode: "mock"`), Windows MT5 connector (retry/backoff), authenticated `/api/mt5/*`
@@ -59,36 +62,39 @@
   shell with auth, health and status cards wired to backend.
 - **Phase 9 — Final review**: security/reliability/migration review, documentation audit
   (report series normalized, API.md refreshed, ADR-009 recorded).
+- **Phase 10 — Infra & ops**: JSON logging option + secret-redaction filter, Channels
+  `ws/status/` WebSocket (read-only), Celery named queues, full Docker stack configs
+  (backend/worker/frontend), production settings hardening, e2e workflow + isolation tests,
+  `docs/OPERATIONS.md`, ADR-010.
 
 ## Incomplete features (not yet implemented)
 
-- Roadmap Phase 10 — Infra & ops: full Docker Compose (backend/worker/frontend containers),
-  Channels WebSockets, production structured logging + redaction, e2e test suite, operational docs.
 - Profile/settings update API (`/api/auth/me/profile/`) and object-level authorization hardening.
 - Backtest HTTP API, performance analytics endpoints, journal export.
 - Interactive candlestick chart with price/time-aligned overlays (frontend placeholder only).
 - Windows MT5 worker live validation (requires Windows terminal + broker credentials; mock only so far).
 - Optional LightGBM probability model (probability deliberately returns null today).
 - GitHub-hosted CI execution (workflow exists, not yet run on GitHub).
+- Docker image build/run verification (Docker unavailable on the dev machine — configs untested).
 
 ## Known issues
 
 - PostgreSQL support configured via `DATABASE_URL` but not yet tested against a live server.
-- Logging is key=value text; JSON logging deferred to Roadmap Phase 10.
+- Docker stack (backend/worker/frontend images) written but never built — no Docker on the dev machine.
+- Redis channel layer (`USE_REDIS_CHANNELS=true`) configured but only the in-memory layer is tested.
 - CI workflow not yet executed on GitHub (runs locally-verified commands).
-- Repository has **no git commits yet** — everything (Phases 1–9) is uncommitted.
 
 ## Test status
 
-- `uv run pytest` → **67 passed, 0 failed** (2026-10-09)
+- `uv run pytest` → **78 passed, 0 failed** (2026-10-09)
 - `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations
 - Frontend `tsc --noEmit` → exit 0 (2026-10-09)
 - Live smoke test: `GET /api/health/` → `200 OK` on runserver (2026-10-08)
 
 ## Next phase
 
-- **None scheduled.** Owner approval required before any further work. Remaining scope is tracked
-  under "Incomplete features" (Roadmap Phase 10 + gaps above).
+- **None scheduled — all 10 roadmap phases are complete.** Owner approval required before any
+  further work; remaining gaps are tracked under "Incomplete features".
 
 ## Blockers
 
@@ -96,5 +102,7 @@
 
 ## Commit references
 
-- No commits yet — repository has an initial tree only (owner's first commit pending; recommend
-  committing the Phase 9 state as the baseline before further work).
+- `dbe7fba` — Phase 1–9 baseline (67 tests at the time).
+- `5fb5408` — Phase 10 implementation (code, tests, Docker configs).
+- Phase 10 docs (`PHASE_10.md`, ADR-010, `OPERATIONS.md`, API.md, this file) — the commit(s)
+  following `5fb5408` (see `git log`).

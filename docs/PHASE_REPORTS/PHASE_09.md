@@ -47,7 +47,8 @@ the owner). This file is the phase record for the `PHASE_REPORTS/` series.
 - Interactive candlestick chart overlays are placeholders; no price/time-aligned overlay engine.
 - Backtester trade simulation is simplified (no full fill engine, no real spread series).
 - Optional LightGBM model not implemented; probability endpoint intentionally returns null.
-- Repo has **no git commits yet** (everything uncommitted).
+- Repo had **no git commits yet** at review time — since resolved: baseline `dbe7fba`,
+  Phase 10 code `5fb5408` (both 2026-10-09).
 
 ## 5. Recommendation
 

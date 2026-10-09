@@ -87,3 +87,39 @@ not previously recorded in DECISIONS.md.
   performed to avoid rewriting working docs.
 - Remaining open scope is explicitly tracked as Roadmap Phase 10 (full Docker app containers,
   Channels WebSockets, production logging/redaction, e2e suite, operational docs).
+
+---
+
+## ADR-010 — Phase 10 infrastructure decisions (Roadmap: Infra & ops)
+
+**Status:** Accepted
+**Date:** 2026-10-09 (Roadmap Phase 10 implementation)
+
+### Context
+
+Roadmap Phase 10 covers Docker Compose (backend/worker), Channels WebSockets, Celery queues,
+structured logging + redaction, production rate limiting, e2e tests and operational docs. Three
+implementation questions had to be answered while building it.
+
+### Decisions
+
+1. **MetaTrader5 gets a PEP 508 platform marker** (`platform_system == 'Windows'` in
+   `pyproject.toml`). The package is Windows-only; without the marker `uv sync` fails on Linux and
+   no backend Docker image can be built. The MT5 connector already degrades gracefully to
+   "unavailable" when the import fails — behavior on Windows is unchanged (still installed).
+2. **WebSocket surface is read-only by design.** `ws/status/` mirrors the public health snapshot
+   and accepts exactly `{"action": "ping"}`. No command channel exists: live data streams or
+   interactive features must justify a future consumer in their own phase — speculative writable
+   WS endpoints are explicitly avoided (analysis-only, MASTER_SPEC §7).
+3. **Docker configurations are written but unverified.** Docker is not installed on the dev
+   machine, so `Dockerfile`, `frontend/Dockerfile` and the compose `app` profile
+   (backend/worker/frontend) were **not built or run**. They are documented as Untested in
+   `docs/OPERATIONS.md` and the PHASE_10 report; nothing claims container verification.
+
+### Consequences
+
+- Linux images can build and the Windows dev workflow is untouched.
+- The WS layer has a tested, honest baseline (`core/tests/test_websocket.py`) that future
+  real-time features can extend.
+- Someone with Docker must run `docker compose --profile app up -d --build` once before the
+  container stack can be considered working.

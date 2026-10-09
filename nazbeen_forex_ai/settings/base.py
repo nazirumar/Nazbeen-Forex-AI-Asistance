@@ -159,6 +159,29 @@ CELERY_TASK_ROUTES = {
 }
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # fairness for long-running backtests
 
+# --- LLM providers (Phase 11B) ----------------------------------------------
+# Explicit mock switch: True keeps the labeled mock providers (development and
+# the automated suite). False enables the configured real providers; when a real
+# provider fails the failure is surfaced to the caller — never silently mocked
+# (MASTER_SPEC §4 "Never silently substitute mock data for live data").
+USE_MOCK_LLM = env_bool("USE_MOCK_LLM", True)
+
+# Vision role: screenshot inspection. Reasoning role: explanations/scenarios.
+# Supported provider values: "openai", "gemini".
+VISION_LLM_PROVIDER = (env_str("VISION_LLM_PROVIDER", "") or "").strip().lower()
+VISION_LLM_API_KEY = env_str("VISION_LLM_API_KEY", "") or ""
+VISION_LLM_MODEL = env_str("VISION_LLM_MODEL", "") or ""
+
+REASONING_LLM_PROVIDER = (env_str("REASONING_LLM_PROVIDER", "") or "").strip().lower()
+REASONING_LLM_API_KEY = env_str("REASONING_LLM_API_KEY", "") or ""
+REASONING_LLM_MODEL = env_str("REASONING_LLM_MODEL", "") or ""
+
+# Transport hardening (Phase 11B): per-attempt timeout, retry count for
+# 429/5xx/timeouts, and the base backoff between retries (exponential, capped).
+LLM_TIMEOUT_SECONDS = env_int("LLM_TIMEOUT_SECONDS", 60)
+LLM_MAX_RETRIES = env_int("LLM_MAX_RETRIES", 2)
+LLM_RETRY_BACKOFF_SECONDS = env_int("LLM_RETRY_BACKOFF_SECONDS", 1)
+
 # --- Channels (WebSockets) -------------------------------------------------
 
 ASGI_APPLICATION = "nazbeen_forex_ai.asgi.application"

@@ -36,6 +36,12 @@ MAILERS = {
 # True guarantees mock selection even when a developer's .env has MT5_USE_MOCK=false.
 MT5_USE_MOCK = True
 
+# --- Test isolation for LLM providers (Phase 11B) -----------------------------
+# The suite always runs against the labeled mock LLM providers regardless of any
+# local `.env` (real-provider behavior is covered by unit tests with fake HTTP
+# sessions — no network access, no keys required).
+USE_MOCK_LLM = True
+
 # Tests never talk to a real broker: tasks run synchronously in-process.
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True

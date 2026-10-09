@@ -5,8 +5,8 @@
 
 ## Current phase
 
-**Phase 11A — Critical Correctness Remediation (audit-driven)** ✅ completed 2026-10-09 —
-**awaiting owner approval before Phase 11B**
+**Phase 11B - Real Vision & Reasoning LLM Providers** - completed 2026-10-09 -
+**awaiting owner approval before any further 11B scope**
 
 ## Completed phases
 
@@ -23,6 +23,7 @@
 | 9 | Final Integration, Security Review and Demo Release | `docs/PHASE_REPORTS/PHASE_09.md` + `docs/FINAL_RELEASE_REPORT.md` | 2026-10-09 |
 | 10 | Infra & Ops (Roadmap Phase 10) | `docs/PHASE_REPORTS/PHASE_10.md` | 2026-10-09 |
 | 11A | Critical Correctness Remediation (audit fixes) | `docs/PHASE_REPORTS/PHASE_11A.md` + `docs/audits/PHASE_11A_FIX_VERIFICATION.md` | 2026-10-09 |
+| 11B | Real Vision & Reasoning LLM Providers | `docs/PHASE_REPORTS/PHASE_11B.md` | 2026-10-09 |
 
 ## Completed features
 
@@ -76,6 +77,7 @@
   correct pip-value/position sizing with unknown-symbol rejection (H-06/M-06), walk-forward
   aggregation fix (M-07 partial); all 15 audit repro tests migrated into app test packages
   and passing.
+- **Phase 11B - real vision/reasoning LLM providers**: configurable OpenAI + Gemini adapters (`analysis/llm_providers.py`) with typed Pydantic claim schemas (no decision field), hardened HTTP transport (timeout, retries, 429/Retry-After, secret redaction), deterministic authority over every LLM claim, loud non-mock failure handling, and `manage.py llm_smoke` (H-03 real-provider half; H-05 LLM subordination; ADR-011).
 
 ## Incomplete features (not yet implemented)
 
@@ -87,6 +89,8 @@
 - GitHub-hosted CI execution (workflow exists, not yet run on GitHub).
 - Docker image build/run verification (Docker unavailable on the dev machine — configs untested).
 
+- LangGraph orchestration (MASTER_SPEC section 2): real provider adapters shipped in Phase 11B; graph orchestration awaits the owner decision (ADR-011).
+
 ## Known issues
 
 - PostgreSQL support configured via `DATABASE_URL` but not yet tested against a live server.
@@ -94,9 +98,11 @@
 - Redis channel layer (`USE_REDIS_CHANNELS=true`) configured but only the in-memory layer is tested.
 - CI workflow not yet executed on GitHub (runs locally-verified commands).
 
+- No real LLM provider call has been executed from this environment (no OpenAI/Gemini API keys); every real-provider code path is covered by mocked-transport tests only. Verify live with `manage.py llm_smoke` and real keys (see `docs/TESTING.md`).
+
 ## Test status
 
-- `uv run pytest` → **145 passed, 0 failed** (2026-10-09, Phase 11A; ~13 s — hermetic mock-only)
+- `uv run pytest` → **200 passed, 0 failed** (2026-10-09, Phase 11B (55 new LLM tests); ~14 s — hermetic mock-only)
 - `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated)
 - `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations
 - Frontend `tsc --noEmit` → exit 0 (2026-10-09)
@@ -106,10 +112,11 @@
 
 ## Next phase
 
-- **Phase 11B — remaining audit remediation (P1 items): NOT started, explicit owner approval
-  required.** Scope candidates: analysis-services authority over the LLM, MTF conflicts,
-  remaining M/L issues, P-01/P-02/P-03, documentation errata (H-10), frontend fixes.
-  Approval is never implied.
+- **Phase 11B - real vision/reasoning LLM providers: COMPLETED 2026-10-09**
+  (`docs/PHASE_REPORTS/PHASE_11B.md`). Remaining audit remediation (H-02, H-04,
+  H-10, M-03/M-04/M-05 remainder, M-08-M-16, P-02, MTF conflicts, frontend
+  H-07/H-08) and LangGraph (ADR-011): **NOT started - explicit owner approval
+  required. Approval is never implied.**
 
 ## Blockers
 
@@ -121,3 +128,5 @@
 - `5fb5408` — Phase 10 implementation (code, tests, Docker configs).
 - Phase 10 docs (`PHASE_10.md`, ADR-010, `OPERATIONS.md`, API.md, this file) — the commit(s)
   following `5fb5408` (see `git log`).
+- `15f96ff` - Phase 11A implementation (code, tests, docs).
+- Phase 11B LLM providers (`docs/PHASE_REPORTS/PHASE_11B.md`, ADR-011, this file) - the commit(s) following `15f96ff` (see `git log`).

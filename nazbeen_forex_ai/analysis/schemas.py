@@ -6,6 +6,46 @@ from pydantic import BaseModel, Field
 from typing import Literal, List, Dict, Any, Optional
 import base64
 
+# ---------------------------------------------------------------------------
+# LLM claim schemas (Phase 11B)
+#
+# These deliberately constrain what a vision/reasoning model is ALLOWED to
+# claim. Note the absence of a `decision` field: the LLM never decides
+# BUY/SELL/WAIT. Decisions belong to the deterministic engine and the risk
+# service (MASTER_SPEC §3.D/§3.E; audit H-05 — deterministic findings are
+# authoritative over LLM interpretations). Candidate price levels are kept as
+# observations only and never become actionable entry/SL/TP levels.
+# ---------------------------------------------------------------------------
+
+
+class LLMChartAssessment(BaseModel):
+    """What a vision model observed in a chart screenshot."""
+
+    observed_symbol: Optional[str] = Field(default=None, max_length=32)
+    observed_timeframe: Optional[str] = Field(default=None, max_length=16)
+    summary: str = Field(default="", max_length=2000)
+    direction: Literal["bullish", "bearish", "neutral"] = "neutral"
+    observations: List[str] = Field(default_factory=list, max_length=50)
+    # Candidate prices merely READ from the image; unverified by design.
+    candidate_levels: List[float] = Field(default_factory=list, max_length=50)
+    uncertainty: List[str] = Field(default_factory=list, max_length=50)
+    missing_evidence: List[str] = Field(default_factory=list, max_length=50)
+    # Self-reported confidence of the model's own reading — kept as an LLM
+    # self-report, never presented as a calibrated probability (MASTER_SPEC §3.F).
+    self_reported_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class LLMReasoningOutput(BaseModel):
+    """What a reasoning model produced from deterministic findings + context."""
+
+    explanation: str = Field(default="", max_length=4000)
+    bullish_scenario: str = Field(default="", max_length=2000)
+    bearish_scenario: str = Field(default="", max_length=2000)
+    key_risks: List[str] = Field(default_factory=list, max_length=50)
+    uncertainty: List[str] = Field(default_factory=list, max_length=50)
+    missing_evidence: List[str] = Field(default_factory=list, max_length=50)
+
+
 class CandleInfo(BaseModel):
     time: str
     open: float

@@ -20,6 +20,15 @@ historical finding; per-issue verification with test names and live evidence liv
 `PHASE_11A_FIX_VERIFICATION.md`. The repro tests were migrated into the app test packages
 (§ "Repro index" footnote) and the retained artifact copy now runs **15/15 PASS**.
 
+> **Phase 11B update (2026-10-09):** the real-provider half of **H-03** — configurable
+> OpenAI/Gemini vision + reasoning adapters with timeouts, retries, rate-limit handling,
+> secret redaction and schema-validated structured output — is implemented and covered by
+> 55 new mocked-provider tests (`PHASE_11B.md`). The LLM-subordination half of **H-05** is
+> also implemented: deterministic MT5/ICT/SMC findings are authoritative over every LLM
+> claim, the LLM can never upgrade WAIT to BUY/SELL, and LLM-read price levels can never
+> reach `entry_levels`/`sl`/`tp`. LangGraph orchestration remains open as an owner decision
+> (ADR-011); H-04's symbol/timeframe defaults are unchanged (still open).
+
 | ID | Status | Notes |
 |---|---|---|
 | CRIT-01 | ✅ resolved | Real SL/TP simulation, costs, honest metrics, injectable strategy |
@@ -29,9 +38,9 @@ historical finding; per-issue verification with test names and live evidence liv
 | CRIT-05 | ✅ resolved | Evidence-based UTC offset (live-measured +3.0002 h) + future rejection |
 | H-01 | ✅ resolved | Strict Pillow validation; view returns safe 400s |
 | H-02 | ⛔ open | Screenshot persistence / `MEDIA_ROOT` — 11B |
-| H-03 | ⛔ open | LangGraph/real LLMs — owner decision |
-| H-04 | ⛔ open | Fabrication guard redesign — 11B |
-| H-05 | 🟡 partial | Bias heuristic fixed + repro passes; conflicts list & LLM subordination → 11B |
+| H-03 | 🟡 partial | Real OpenAI/Gemini vision+reasoning providers implemented & tested (Phase 11B); LangGraph → owner decision (ADR-011) |
+| H-04 | ⛔ open | Fabrication guard redesign — 11B (note: LLM price levels can no longer reach entry/SL/TP at all since Phase 11B) |
+| H-05 | 🟡 partial | Bias heuristic fixed + repro passes; LLM subordination to deterministic engine done (Phase 11B); conflicts list remains |
 | H-06 | ✅ resolved | Correct pip value per lot; exact 1.00-lot EURUSD repro |
 | H-07 | ⛔ open | Frontend login — 11B+ |
 | H-08 | ⛔ open | Dashboard scope — 11B+ |

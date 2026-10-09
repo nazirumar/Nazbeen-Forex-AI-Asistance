@@ -123,3 +123,51 @@ implementation questions had to be answered while building it.
   real-time features can extend.
 - Someone with Docker must run `docker compose --profile app up -d --build` once before the
   container stack can be considered working.
+
+## ADR-011 — Phase 11B LLM provider implementation (typed adapters, LangGraph deferred)
+
+**Date:** 2026-10-09 (Phase 11B — real vision/reasoning LLM providers)
+
+### Context
+
+The Phase 10 audit (H-03) flagged that "configurable LLM providers" were inert: the factory
+returned the mock in both branches, no HTTP client was even a dependency, and `.env.example`
+vision/reasoning variables were read by nothing. The owner's instruction for this phase was
+explicit: replace the mock-only factory with real OpenAI + Google Gemini adapters for the
+existing `VISION_LLM_*` / `REASONING_LLM_*` variables, with structured JSON outputs,
+timeouts/retries, no silent mock fallback, and deterministic findings staying authoritative.
+MASTER_SPEC §2 additionally lists LangGraph for orchestration — but LangGraph was **not** part
+of the owner's instruction for this phase, and LangGraph is still not a dependency.
+
+### Decisions
+
+1. **Thin typed provider adapters over `httpx`, not SDK packages.** `OpenAIProvider` and
+   `GeminiProvider` speak the documented HTTP APIs directly (Chat Completions /
+   `generateContent`) through a shared `HTTPTransport` that owns timeout, bounded retries,
+   `Retry-After` rate-limit handling and secret-stripped errors. One dependency (`httpx`,
+   added via `uv add`) instead of two vendor SDKs; the transport layer is unit-testable with
+   injected fake sessions, so the suite needs no network or keys.
+2. **The LLM returns claims, never decisions.** `LLMChartAssessment` / `LLMReasoningOutput`
+   deliberately contain no `decision` field; `apply_deterministic_authority()` in the service
+   computes BUY/SELL/WAIT from deterministic findings alone (audit H-05 half). Candidate price
+   levels read from a screenshot stay tagged `source="ai"` evidence and can never become
+   `entry_levels`/`sl`/`tp`.
+3. **Explicit mock switch, hard failure otherwise.** `USE_MOCK_LLM=true` selects the labeled
+   mock; with it `false`, missing/unknown configuration raises `LLMConfigurationError` and
+   runtime failures raise `LLMError` — there is no code path that silently substitutes the
+   mock for a failed real provider (MASTER_SPEC §4). Test settings force `USE_MOCK_LLM = True`
+   for hermeticity (same pattern as `MT5_USE_MOCK`).
+4. **LangGraph orchestration is deferred, not dropped.** The spec requirement stands; the
+   workflow remains the service-layer "LangGraph-style" pipeline, and this ADR records that
+   the owner must decide implement-vs-amend before any phase claims LangGraph. When approved,
+   the providers are already structured to become graph nodes/tools unchanged.
+
+### Consequences
+
+- H-03 becomes "partial" (real providers done, LangGraph open); H-05's LLM-subordination
+  requirement is satisfied and test-covered.
+- Real-provider behavior remains **unverified in this environment** (no API keys here); the
+  `manage.py llm_smoke` command plus `docs/TESTING.md` document exactly how the owner runs
+  one real call per role. No doc claims live-provider verification.
+- API-key exposure is prevented by construction (header auth, redacted `__repr__`, secret
+  stripping in errors) rather than by convention.

@@ -17,6 +17,7 @@ dependencies = [
     "djangorestframework>=3.16",
     "gunicorn>=26.2.0",
     # Windows-only: skipped on Linux so Docker images can build (Phase 10).
+    "httpx>=0.28.1",
     "MetaTrader5; platform_system == 'Windows'",
     "numpy>=2.5.3",
     "pandas>=3.0.6",

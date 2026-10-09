@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal
 
@@ -65,11 +66,28 @@ def evaluate_trade_plan(
             evidence=evidence,
         )
 
+    # Reject NaN/inf instead of propagating them into prices or 500s.
+    if not all(math.isfinite(float(v)) for v in (entry, sl, tp)):
+        reasons.append("Non-finite price level")
+        return ScenarioResult(decision="WAIT", direction="neutral", reasons=reasons)
+
     if sl == entry or tp == entry:
         reasons.append("Invalid price levels")
         return ScenarioResult(decision="WAIT", direction="neutral", reasons=reasons)
 
     spec = get_symbol_spec(symbol)
+    if spec is None:
+        # Unknown contract specifications: reject rather than fabricate (H-06).
+        reasons.append(f"Unknown symbol specifications: {symbol}")
+        warnings.append("No contract specification available for this symbol")
+        return ScenarioResult(
+            decision="WAIT",
+            direction="neutral",
+            reasons=reasons,
+            warnings=warnings,
+            evidence=evidence,
+        )
+
     entry_r = round_to_tick(entry, spec.tick_size)
     sl_r = round_to_tick(sl, spec.tick_size)
     tp_r = round_to_tick(tp, spec.tick_size)

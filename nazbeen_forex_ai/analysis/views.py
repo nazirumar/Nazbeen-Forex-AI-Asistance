@@ -24,12 +24,14 @@ class ScreenshotUploadView(APIView):
         file = request.FILES.get("image") or request.FILES.get("file")
         if not file:
             return Response({"error": "No image file provided"}, status=status.HTTP_400_BAD_REQUEST)
-        # be permissive for tests
+        # Strict validation: invalid uploads are rejected with a safe 400 (audit H-01).
         try:
             validate_image_upload(file)
-        except ValidationError:
-            # don't block tests with strict validation
-            pass
+        except ValidationError as e:
+            return Response(
+                {"error": "Invalid image upload", "details": e.messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user_hints = {}
         if request.data.get("symbol"):

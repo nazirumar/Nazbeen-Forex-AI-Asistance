@@ -1,17 +1,30 @@
-"""Reproducible bug-documentation tests — AUDIT ARTIFACTS, NOT PART OF THE SUITE.
+"""Reproducible bug-documentation tests — AUDIT ARTIFACT, NOW REMEDIATED.
 
-These tests demonstrate confirmed defects found during the Phase 10 full audit.
-They are intentionally placed OUTSIDE `testpaths = ["nazbeen_forex_ai"]` so the
-main suite and CI are unaffected. Run them explicitly to reproduce the bugs:
+These tests demonstrated the confirmed defects found during the Phase 10 full
+audit. **Phase 11A has since fixed every bug below**, and all 15 tests were
+migrated into the application test packages where they now run as permanent
+regressions:
 
-    uv run pytest docs/audits/repro -v
+    structure/tests/test_audit_regressions.py   (6 tests)
+    marketdata/tests/test_audit_regressions.py  (2 tests)
+    risk/tests/test_audit_regressions.py        (2 tests)
+    analysis/tests/test_audit_regressions.py    (2 tests)
+    backtesting/tests/test_audit_regressions.py (3 tests)
 
-Expected outcome at audit time: ALL of them FAIL (each failure = one confirmed
-bug). They must be moved into the app test packages (and made to pass) as part
-of the remediation tracked in docs/audits/RECOMMENDED_FIXES.md.
+This file is kept as the historical audit index and still passes against the
+fixed code. Two adaptations were made during migration (documented in
+docs/PHASE_REPORTS/PHASE_11A.md):
 
-Every test asserts the CORRECT behavior; the current (buggy) actual value is
-noted in each docstring.
+1. The unknown-symbol test asserts the fixed API directly
+   (``get_symbol_spec(...) is None`` + WAIT) instead of probing the shape of a
+   spec object that no longer exists by design.
+2. The backtest cost/outcome tests inject a deterministic signal strategy,
+   because the corrected structure detectors form no FVG setups on smooth
+   sawtooth data — an honest outcome, but it would leave the engine mechanics
+   untested without an injected signal source.
+
+Every test asserts the CORRECT behavior; the pre-fix actual value is noted in
+each docstring.
 """
 
 from __future__ import annotations
@@ -193,20 +206,24 @@ def test_bug_position_size_eurusd_exact() -> None:
 
 
 def test_bug_unknown_symbol_yields_wait_not_fabricated_spec() -> None:
-    """BUG M-2 (risk): symbols outside the 7-major table silently get EURUSD-like specs.
+    """BUG M-2 (risk): symbols outside the 7-major table silently got EURUSD-like specs.
 
-    Actual: XAUUSD (contract 100, XAU pip 0.1) is sized with contract_size=100000,
-    pip 0.0001 -> fabricated contract data; correct behavior is WAIT / error.
+    Actual (pre-fix): XAUUSD (contract 100, XAU pip 0.1) was sized with
+    contract_size=100000, pip 0.0001 -> fabricated contract data.
+    Fixed behavior (Phase 11A): get_symbol_spec returns None and the trade plan
+    returns WAIT — asserted below in the fixed-API form.
     """
-    from nazbeen_forex_ai.risk.calculations import get_symbol_spec
+    from nazbeen_forex_ai.risk.calculations import get_symbol_spec, position_size
+    from nazbeen_forex_ai.risk.scenarios import evaluate_trade_plan
 
     spec = get_symbol_spec("XAUUSD")
-    # Correct behavior: an unregistered symbol must NOT silently receive
-    # EURUSD-like specs (contract 100000, pip 0.0001). It should raise/return a
-    # sentinel that makes evaluate_trade_plan return WAIT.
-    assert (spec.contract_size, spec.pip_size) != (100000.0, 0.0001), (
-        "XAUUSD silently received fabricated EURUSD-like contract specs"
+    assert spec is None, f"XAUUSD must be rejected (None), got {spec!r}"
+    assert position_size(10000.0, 1.0, 2000.0, 1999.0, spec) == 0.0
+    res = evaluate_trade_plan(
+        bias="BULLISH", entry=2000.0, sl=1990.0, tp=2030.0,
+        spread_pips=0.5, symbol="XAUUSD", account_balance=10000.0,
     )
+    assert res.decision == "WAIT"
 
 
 # --------------------------------------------------------------------------
@@ -269,16 +286,31 @@ def _oscillating_candles(n: int = 240) -> list[dict]:
     return out
 
 
+def _deterministic_strategy(window):
+    """Migration adaptation: the corrected structure detectors form no FVG
+    setups on smooth sawtooth data, so an injected signal source is used to
+    exercise the engine's cost/outcome mechanics directly."""
+    if len(window) % 12 != 0:
+        return "WAIT"
+    return "BUY" if (len(window) // 12) % 2 == 0 else "SELL"
+
+
 def test_bug_backtest_applies_cost_parameters() -> None:
     """BUG H-1 (backtesting): commission/slippage/spread params are accepted but never applied.
 
-    Actual: Trade.commission/.slippage/.spread_cost stay 0.0 for every trade
+    Actual (pre-fix): Trade.commission/.slippage/.spread_cost stay 0.0 for every trade
     (engine.py never references the parameters after the signature).
     """
     from nazbeen_forex_ai.backtesting.engine import run_backtest
 
-    result = run_backtest(_oscillating_candles(), commission_pips=5.0, slippage_pips=1.0, spread_pips=2.0)
-    assert result.total_trades > 0, "engine generated no trades on oscillating data (itself a finding)"
+    result = run_backtest(
+        _oscillating_candles(),
+        commission_pips=5.0,
+        slippage_pips=1.0,
+        spread_pips=2.0,
+        strategy=_deterministic_strategy,
+    )
+    assert result.total_trades > 0, "engine generated no trades (itself a finding)"
     assert any(t.commission > 0 or t.slippage > 0 or t.spread_cost > 0 for t in result.trades), (
         "cost parameters were ignored: every trade has zero cost"
     )
@@ -287,12 +319,12 @@ def test_bug_backtest_applies_cost_parameters() -> None:
 def test_bug_backtest_outcomes_are_not_dummy() -> None:
     """BUG C-1 (backtesting): pnl is hardcoded to 1.0 ('dummy outcome').
 
-    Actual: every trade wins => win_rate == 100%, gross_loss == 0, drawdown == 0 —
+    Actual (pre-fix): every trade wins => win_rate == 100%, gross_loss == 0, drawdown == 0 —
     fabricated performance figures (MASTER_SPEC §7).
     """
     from nazbeen_forex_ai.backtesting.engine import run_backtest
 
-    result = run_backtest(_oscillating_candles())
+    result = run_backtest(_oscillating_candles(), strategy=_deterministic_strategy)
     assert result.total_trades > 0, "engine generated no trades (itself a finding)"
     assert result.gross_loss > 0 or result.win_rate < 100.0, (
         f"impossible performance: win_rate={result.win_rate}%, gross_loss={result.gross_loss} (pnl hardcoded to 1.0)"
@@ -303,13 +335,16 @@ def test_bug_walkforward_overall_is_aggregate_of_windows() -> None:
     """BUG M2 (backtesting): `overall` re-runs the engine on the last test window
     instead of aggregating window results (all_trades is dead code).
 
-    Actual: overall.total_trades == trades(candles[-test_size:]) != sum(window trades).
+    Actual (pre-fix): overall.total_trades == trades(candles[-test_size:]) != sum(window trades).
+    A deterministic strategy is injected so the aggregation is exercised with
+    real trades rather than a vacuous 0 == 0.
     """
     from nazbeen_forex_ai.backtesting.walkforward import walk_forward
 
     candles = _oscillating_candles(500)
-    wf = walk_forward(candles, train_size=200, test_size=100, step=100)
+    wf = walk_forward(candles, train_size=200, test_size=100, step=100, strategy=_deterministic_strategy)
     window_total = sum(w["result"].total_trades for w in wf.windows)
+    assert window_total > 0
     assert wf.overall.total_trades == window_total, (
         f"overall={wf.overall.total_trades} != sum(windows)={window_total} — 'overall' is not an aggregation"
     )

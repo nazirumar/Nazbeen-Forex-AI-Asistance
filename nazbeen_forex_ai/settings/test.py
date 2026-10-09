@@ -28,6 +28,14 @@ MAILERS = {
     "default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"},
 }
 
+# --- Test isolation for market data (audit CRIT-04) ---------------------------
+# Force the mock market-data provider for the entire test suite. This makes the
+# factory select MockMarketDataProvider regardless of any local `.env` value of
+# MT5_USE_MOCK, so the suite is hermetic and never requires a live MT5 terminal.
+# NOTE: the factory uses `env_bool(...) or settings.MT5_USE_MOCK`; setting this
+# True guarantees mock selection even when a developer's .env has MT5_USE_MOCK=false.
+MT5_USE_MOCK = True
+
 # Tests never talk to a real broker: tasks run synchronously in-process.
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True

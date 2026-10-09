@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from nazbeen_forex_ai.config import env_str
 from nazbeen_forex_ai.marketdata.providers import (
     Candle,
     MarketDataProvider,
@@ -20,6 +21,48 @@ try:
     import MetaTrader5 as mt5
 except Exception:  # pragma: no cover
     mt5 = None
+
+
+# --- UTC normalization helpers (audit CRIT-05) --------------------------------
+# MT5 reports bar/tick timestamps as epoch seconds derived from the broker
+# SERVER's local wall-clock (commonly UTC+2/+3), not true UTC. Blindly treating
+# them as UTC shifts every candle into the future. We therefore measure an
+# evidence-based offset instead of assuming a fixed one, and reject candles that
+# are still impossible (in the future) after normalization.
+
+# Plausible bounds for a broker server offset from UTC (hours).
+_MIN_OFFSET_SEC = -12 * 3600
+_MAX_OFFSET_SEC = 14 * 3600
+
+
+def compute_offset_seconds(server_epoch: float, utc_now_epoch: float) -> float:
+    """Evidence-based server→UTC offset in seconds (server_epoch - true_utc_epoch)."""
+    return float(server_epoch) - float(utc_now_epoch)
+
+
+def normalize_mt5_epoch(epoch_seconds: float, offset_seconds: float = 0.0) -> datetime:
+    """Convert an MT5 server-local epoch into a true-UTC datetime."""
+    return datetime.fromtimestamp(float(epoch_seconds) - float(offset_seconds), tz=timezone.utc)
+
+
+def reject_future_candles(
+    candles: list[Candle],
+    now: datetime | None = None,
+    tolerance_sec: int = 300,
+) -> None:
+    """Raise if any candle timestamp is still in the future after normalization.
+
+    A candle may legitimately be at most ~one bar + tolerance ahead of now (the
+    currently-forming bar). Anything further indicates a normalization error.
+    """
+    now = ensure_utc(now) if now else datetime.now(timezone.utc)
+    limit = now + timedelta(seconds=tolerance_sec)
+    for c in candles:
+        if c.time > limit:
+            raise MarketDataProviderError(
+                f"impossible future candle timestamp after UTC normalization: {c.time.isoformat()} "
+                f"(now={now.isoformat()}); check MT5_UTC_OFFSET_HOURS"
+            )
 
 
 TIMEFRAME_MAP: dict[str, Any] = {}
@@ -47,6 +90,7 @@ class MT5MarketDataProvider(MarketDataProvider):
         timeout_sec: int = 30,
         max_retries: int = 3,
         retry_backoff: float = 0.5,
+        utc_offset_hours: str | float | None = None,
     ) -> None:
         self._path = path
         self._login = login
@@ -55,6 +99,12 @@ class MT5MarketDataProvider(MarketDataProvider):
         self._timeout_sec = timeout_sec
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff
+        # "auto" (default) measures the broker offset from a live tick; a number
+        # pins it explicitly. Never assume a fixed offset without evidence.
+        if utc_offset_hours is None:
+            utc_offset_hours = env_str("MT5_UTC_OFFSET_HOURS", "auto")
+        self._utc_offset_hours = utc_offset_hours
+        self._cached_offset_sec: float | None = None
         self._connected = False
 
     def _call_with_retry(self, fn, *args, **kwargs):
@@ -119,6 +169,41 @@ class MT5MarketDataProvider(MarketDataProvider):
         except Exception as e:
             raise MarketDataProviderError(str(e))
 
+    def _resolve_offset_seconds(self, symbol: str | None = None) -> float:
+        """Return the broker server→UTC offset in seconds, with evidence when possible.
+
+        - Pinned mode: ``MT5_UTC_OFFSET_HOURS`` set to a number → used directly.
+        - Auto mode (default): measured from a fresh tick (server epoch vs the
+          host's true UTC clock). Falls back to 0 when no reliable tick is
+          available (e.g. market closed) and logs a warning.
+        """
+        # Pinned numeric offset.
+        try:
+            pinned = float(self._utc_offset_hours)
+            return pinned * 3600.0
+        except (TypeError, ValueError):
+            pass
+
+        if self._cached_offset_sec is not None:
+            return self._cached_offset_sec
+
+        offset = 0.0
+        if mt5 is not None and symbol:
+            try:
+                tick = mt5.symbol_info_tick(symbol.upper())
+                if tick is not None and getattr(tick, "time", None):
+                    offset = compute_offset_seconds(tick.time, time.time())
+                    # Sanity guard: reject implausible or stale-tick offsets.
+                    if not (_MIN_OFFSET_SEC <= offset <= _MAX_OFFSET_SEC):
+                        logger.warning("MT5 auto offset %ss out of range; defaulting to 0", offset)
+                        offset = 0.0
+                    else:
+                        self._cached_offset_sec = offset
+            except Exception as e:  # pragma: no cover - MT5 runtime
+                logger.warning("MT5 offset auto-detect failed (%s); defaulting to 0", e)
+                offset = 0.0
+        return offset
+
     def get_symbols(self, search: str | None = None) -> list[dict[str, Any]]:
         if not self.is_connected():
             raise MarketDataProviderError("not connected")
@@ -151,6 +236,12 @@ class MT5MarketDataProvider(MarketDataProvider):
         tf = TIMEFRAME_MAP.get(timeframe)
         if tf is None:
             raise MarketDataProviderError(f"unsupported timeframe {timeframe}")
+        # Live-validation guard (Phase 11A): copy_rates fails with "Call failed"
+        # when the symbol is not selected in MarketWatch; ensure it is.
+        try:
+            mt5.symbol_select(symbol.upper(), True)
+        except Exception:  # pragma: no cover - MT5 runtime
+            pass
 
         if count is not None:
             if start is not None:
@@ -166,9 +257,10 @@ class MT5MarketDataProvider(MarketDataProvider):
         if rates is None:
             err = mt5.last_error()
             raise MarketDataProviderError(f"copy_rates failed: {err}")
+        offset_sec = self._resolve_offset_seconds(symbol)
         candles: list[Candle] = []
         for r in rates:
-            t = datetime.fromtimestamp(r[0], tz=timezone.utc)
+            t = normalize_mt5_epoch(r[0], offset_sec)
             candles.append(
                 Candle(
                     time=t,
@@ -181,6 +273,7 @@ class MT5MarketDataProvider(MarketDataProvider):
                     real_volume=r[7] if len(r) > 7 else None,
                 )
             )
+        reject_future_candles(candles)
         return candles
 
     def get_tick(self, symbol: str) -> dict[str, Any]:
@@ -190,11 +283,17 @@ class MT5MarketDataProvider(MarketDataProvider):
         if info is None:
             err = mt5.last_error()
             raise MarketDataProviderError(f"symbol_info_tick failed: {err}")
+        offset_sec = self._resolve_offset_seconds(symbol)
+        tick_time = normalize_mt5_epoch(info.time, offset_sec)
+        if tick_time > datetime.now(timezone.utc) + timedelta(minutes=5):
+            raise MarketDataProviderError(
+                f"impossible future tick timestamp after UTC normalization: {tick_time.isoformat()}"
+            )
         return {
             "symbol": symbol.upper(),
             "bid": float(info.bid),
             "ask": float(info.ask),
             "spread": float(info.ask - info.bid) if info.ask and info.bid else None,
-            "time": datetime.fromtimestamp(info.time, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+            "time": tick_time.isoformat().replace("+00:00", "Z"),
             "volume": getattr(info, "volume", None),
         }

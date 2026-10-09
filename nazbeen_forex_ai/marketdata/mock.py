@@ -62,7 +62,10 @@ class MockMarketDataProvider(MarketDataProvider):
         if not self._connected:
             raise MarketDataProviderError("not connected")
         tf_map = {"M1": 1, "M5": 5, "M15": 15, "M1S": 1, "M5S": 5, "M15S": 15, "H1": 60}
-        mins = tf_map.get(timeframe, 15)
+        if timeframe not in tf_map:
+            # Never silently substitute a different timeframe (audit M-02).
+            raise MarketDataProviderError(f"unsupported timeframe {timeframe}")
+        mins = tf_map[timeframe]
         end = start or datetime.now(timezone.utc)
         end = ensure_utc(end)
         count = count or 100
@@ -88,6 +91,6 @@ class MockMarketDataProvider(MarketDataProvider):
             "bid": 1.10500,
             "ask": 1.10502,
             "spread": 0.00002,
-            "time": utcnow().isoformat().replace("+00:00", "Z"),
+            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "mode": "mock",
         }

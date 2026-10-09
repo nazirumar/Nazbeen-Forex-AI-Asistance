@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+
 from django.urls import reverse
+from PIL import Image
 from rest_framework.test import APIClient
 import pytest
 
@@ -15,6 +18,18 @@ def api() -> APIClient:
     u = get_user_model().objects.create_user("a1", password="Atest-2026!")
     client.force_authenticate(user=u)
     return client
+
+
+def _real_png_bytes() -> BytesIO:
+    """A genuinely valid (decodable) PNG upload fixture.
+
+    Validation is strict (Phase 11A): uploads must decode as real images, so
+    tests supply real image bytes rather than a magic-number stub.
+    """
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), "steelblue").save(buf, format="PNG")
+    buf.seek(0)
+    return buf
 
 
 @pytest.mark.django_db
@@ -32,15 +47,10 @@ def test_upload_no_file(api: APIClient):
 
 @pytest.mark.django_db
 def test_mock_llm_analysis_safe(api: APIClient):
-    # create minimal fake png
-    from io import BytesIO
-
     from django.core.files.uploadedfile import SimpleUploadedFile
-    # use regular bytes - DRF will handle
-    from io import BytesIO
-    data = BytesIO(b"\x89PNG\r\n\x1a\n1234567890")
-    # send as multipart with name
-    resp = api.post(reverse("analysis:upload"), {"image": (data, "test.png")}, format="multipart")
+
+    png = SimpleUploadedFile("test.png", _real_png_bytes().getvalue(), "image/png")
+    resp = api.post(reverse("analysis:upload"), {"image": png}, format="multipart")
     assert resp.status_code == 201
     res = resp.json()["result"]
     assert res["decision"] in ("BUY", "SELL", "WAIT")
@@ -54,12 +64,10 @@ def test_mock_llm_analysis_safe(api: APIClient):
 
 @pytest.mark.django_db
 def test_structured_output_validates_schema(api: APIClient):
-    from io import BytesIO
+    from django.core.files.uploadedfile import SimpleUploadedFile
 
-    data = BytesIO(b"\x89PNG\r\n\x1a\nTEST")
-    data.name = "test.png"
-    data.seek(0)
-    resp = api.post(reverse("analysis:upload"), {"image": data}, format="multipart")
+    png = SimpleUploadedFile("test.png", _real_png_bytes().getvalue(), "image/png")
+    resp = api.post(reverse("analysis:upload"), {"image": png}, format="multipart")
     assert resp.status_code == 201
     res = resp.json()["result"]
     # required keys
@@ -75,12 +83,10 @@ def test_provider_failure_handling(api: APIClient, monkeypatch):
         raise Exception("market data unavailable")
 
     monkeypatch.setattr(services.ScreenshotAnalysisService, "retrieve_market_data", bad_retrieve)
-    from io import BytesIO
+    from django.core.files.uploadedfile import SimpleUploadedFile
 
-    data = BytesIO(b"\x89PNG\r\n\x1a\nBAD")
-    data.name = "bad.png"
-    data.seek(0)
-    resp = api.post(reverse("analysis:upload"), {"image": data}, format="multipart")
+    png = SimpleUploadedFile("bad.png", _real_png_bytes().getvalue(), "image/png")
+    resp = api.post(reverse("analysis:upload"), {"image": png}, format="multipart")
     assert resp.status_code == 201  # safe response
     res = resp.json()["result"]
     assert res["decision"] == "WAIT"

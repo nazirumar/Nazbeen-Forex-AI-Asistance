@@ -5,7 +5,8 @@
 
 ## Current phase
 
-**Phase 10 — Infra & Ops (Roadmap Phase 10, the final roadmap phase)** ✅ completed 2026-10-09 — **awaiting owner approval before next work**
+**Phase 11A — Critical Correctness Remediation (audit-driven)** ✅ completed 2026-10-09 —
+**awaiting owner approval before Phase 11B**
 
 ## Completed phases
 
@@ -21,6 +22,7 @@
 | 8 | Professional Trading Dashboard and User Experience | `docs/PHASE_REPORTS/PHASE_08.md` | 2026-10-08 |
 | 9 | Final Integration, Security Review and Demo Release | `docs/PHASE_REPORTS/PHASE_09.md` + `docs/FINAL_RELEASE_REPORT.md` | 2026-10-09 |
 | 10 | Infra & Ops (Roadmap Phase 10) | `docs/PHASE_REPORTS/PHASE_10.md` | 2026-10-09 |
+| 11A | Critical Correctness Remediation (audit fixes) | `docs/PHASE_REPORTS/PHASE_11A.md` + `docs/audits/PHASE_11A_FIX_VERIFICATION.md` | 2026-10-09 |
 
 ## Completed features
 
@@ -37,7 +39,7 @@
   resilient rate limiting (ADR-008) so throttled endpoints don't 500 when Redis is down.
 - Next.js 15 frontend (TypeScript + Tailwind): dashboard shell, auth panel, health/status cards,
   direct-backend API helper (CORS), frontend `/api/health` probe. Builds/typechecks clean.
-- Test harness: pytest + pytest-django, **78 tests passing** (2026-10-09, full suite).
+- Test harness: pytest + pytest-django, **145 tests passing** (2026-10-09, full suite; 78 pre-11A + 67 added in 11A).
 - CI workflow (`.github/workflows/ci.yml`): backend (`check`, `makemigrations --check --dry-run`, `pytest`) + frontend (`npm ci`, `typecheck`, `build`).
 - Dev tooling: `docker-compose.yml` (Postgres + Redis, plus an `app` profile adding
   backend/worker/frontend containers), PowerShell scripts (`scripts/start-infra.ps1`,
@@ -66,6 +68,14 @@
   `ws/status/` WebSocket (read-only), Celery named queues, full Docker stack configs
   (backend/worker/frontend), production settings hardening, e2e workflow + isolation tests,
   `docs/OPERATIONS.md`, ADR-010.
+- **Phase 11A — Critical correctness remediation**: real backtest SL/TP simulation with
+  costs and honest metrics (CRIT-01), corrected FVG labels/timestamps/threshold (CRIT-02),
+  real BOS/CHOCH/MSS + order blocks + fixed mtf_bias (CRIT-03, H-05 partial), hermetic
+  mock-only tests (CRIT-04), evidence-based MT5 UTC offset + future-timestamp rejection
+  (CRIT-05, live-validated ≈+3 h), strict Pillow upload validation with safe 400s (H-01),
+  correct pip-value/position sizing with unknown-symbol rejection (H-06/M-06), walk-forward
+  aggregation fix (M-07 partial); all 15 audit repro tests migrated into app test packages
+  and passing.
 
 ## Incomplete features (not yet implemented)
 
@@ -86,15 +96,20 @@
 
 ## Test status
 
-- `uv run pytest` → **78 passed, 0 failed** (2026-10-09)
+- `uv run pytest` → **145 passed, 0 failed** (2026-10-09, Phase 11A; ~13 s — hermetic mock-only)
+- `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated)
 - `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations
 - Frontend `tsc --noEmit` → exit 0 (2026-10-09)
 - Live smoke test: `GET /api/health/` → `200 OK` on runserver (2026-10-08)
+- Live MT5 timestamp check (11A.5): auto-measured server offset +3.0002 h; candles normalized
+  to UTC in the past; zero future timestamps (2026-10-09, MetaQuotes-Demo, local machine)
 
 ## Next phase
 
-- **None scheduled — all 10 roadmap phases are complete.** Owner approval required before any
-  further work; remaining gaps are tracked under "Incomplete features".
+- **Phase 11B — remaining audit remediation (P1 items): NOT started, explicit owner approval
+  required.** Scope candidates: analysis-services authority over the LLM, MTF conflicts,
+  remaining M/L issues, P-01/P-02/P-03, documentation errata (H-10), frontend fixes.
+  Approval is never implied.
 
 ## Blockers
 

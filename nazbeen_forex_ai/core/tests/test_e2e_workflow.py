@@ -46,11 +46,18 @@ def test_full_user_workflow(api: APIClient) -> None:
     resp = api.get(reverse("marketdata:mt5_candles") + "?symbol=EURUSD&timeframe=M15&count=5")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["data_source"] in ("mock", "mt5")
+    # Tests are hermetic: the mock provider must be selected (Phase 11A).
+    assert body["data_source"] == "mock"
     assert body["candles"][0]["time"].endswith("Z")
 
     # 5. Upload a screenshot and get a structured analysis
-    image = BytesIO(b"\x89PNG\r\n\x1a\n1234567890")
+    # Strict validation (Phase 11A): uploads must be real decodable images.
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (8, 8), "steelblue").save(buf, format="PNG")
+    image = SimpleUploadedFile("chart.png", buf.getvalue(), "image/png")
     resp = api.post(
         reverse("analysis:upload"),
         {"image": (image, "chart.png"), "symbol": "EURUSD", "timeframe": "M15"},

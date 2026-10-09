@@ -56,4 +56,5 @@ def test_probability_returns_null_insufficient():
 def test_metrics_consistent():
     c = make_candles(150)
     r = run_backtest(c)
-    assert r.wins + r.losses == r.total_trades or r.total_trades == 0
+    # every trade resolves as WIN, LOSS or BREAK_EVEN (no silent drops)
+    assert r.wins + r.losses + r.break_evens == r.total_trades or r.total_trades == 0

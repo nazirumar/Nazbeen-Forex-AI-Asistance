@@ -13,7 +13,53 @@ below are authoritative.**
 > unaffected. They must be migrated into the app test packages and made to pass as part of
 > remediation (see `RECOMMENDED_FIXES.md`).
 
+## Phase 11A remediation status (2026-10-09)
+
+Phase 11A repaired the confirmed defects below. This audit record is preserved verbatim as the
+historical finding; per-issue verification with test names and live evidence lives in
+`PHASE_11A_FIX_VERIFICATION.md`. The repro tests were migrated into the app test packages
+(§ "Repro index" footnote) and the retained artifact copy now runs **15/15 PASS**.
+
+| ID | Status | Notes |
+|---|---|---|
+| CRIT-01 | ✅ resolved | Real SL/TP simulation, costs, honest metrics, injectable strategy |
+| CRIT-02 | ✅ resolved | FVG labels, ordered timestamps, threshold, formation/confirmation |
+| CRIT-03 | ✅ resolved | Real BOS/CHOCH/MSS state machine + importable, real order blocks |
+| CRIT-04 | ✅ resolved | `MT5_USE_MOCK=True` in test settings; factory-contamination test |
+| CRIT-05 | ✅ resolved | Evidence-based UTC offset (live-measured +3.0002 h) + future rejection |
+| H-01 | ✅ resolved | Strict Pillow validation; view returns safe 400s |
+| H-02 | ⛔ open | Screenshot persistence / `MEDIA_ROOT` — 11B |
+| H-03 | ⛔ open | LangGraph/real LLMs — owner decision |
+| H-04 | ⛔ open | Fabrication guard redesign — 11B |
+| H-05 | 🟡 partial | Bias heuristic fixed + repro passes; conflicts list & LLM subordination → 11B |
+| H-06 | ✅ resolved | Correct pip value per lot; exact 1.00-lot EURUSD repro |
+| H-07 | ⛔ open | Frontend login — 11B+ |
+| H-08 | ⛔ open | Dashboard scope — 11B+ |
+| H-09 | 🟡 partial | Timestamps/`symbol_select`/connector tests added; credentials, suffix, staleness → 11B |
+| H-10 | ⛔ open | Documentation errata pass — 11B |
+| M-01 | ✅ resolved | Mock tick uses `datetime.now(timezone.utc)` |
+| M-02 | ✅ resolved | Unknown timeframe raises `MarketDataProviderError` |
+| M-03 | ⛔ open | `count` serializer validation — 11B |
+| M-04 | ⛔ open | Provider-mode label — 11B |
+| M-05 | 🟡 partial | Non-finite/unknown-symbol → WAIT; serializer + redaction → 11B |
+| M-06 | ✅ resolved | `get_symbol_spec` returns `None`; never fabricated |
+| M-07 | 🟡 partial | `overall` = aggregation (repro passes); P-02 fallback + sort validation → 11B |
+| M-08 | ⛔ open | Default-params issue — 11B |
+| M-09 | ⛔ open | Missing detectors (incl. P-01) — 11B |
+| M-10 | 🟡 partial | `formation_time`/`confirmed_at` on FVG/BOS/OB; liquidity/swings events → 11B |
+| M-11 … M-16 | ⛔ open | Not in 11A scope — 11B |
+| P-01 / P-02 / P-03 | ⛔ open | 11B (P-03 stale-signal reuse is mitigated by the new engine loop; P-02 fallback remains) |
+| L-01 … L-07 | ⛔ open | Not in 11A scope |
+
+**Suite after 11A:** `uv run pytest` → 145 passed · `manage.py check` → clean ·
+`makemigrations --check --dry-run` → no changes.
+
 ## Repro index
+
+> **Post-11A note (2026-10-09):** the 15 repros below were migrated into
+> `structure|marketdata|risk|analysis|backtesting/tests/test_audit_regressions.py` (all pass as
+> permanent regressions); the artifact copy in this folder now passes **15/15** against the fixed
+> code. The FAIL column documents the audit-time result (historical).
 
 | # | Test function | Result | Confirms |
 |---|---|---|---|

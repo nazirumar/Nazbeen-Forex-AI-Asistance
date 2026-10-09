@@ -5,22 +5,34 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from nazbeen_forex_ai.structure.fvg import detect_fvg
-from nazbeen_forex_ai.structure.swings import classify_structure, detect_swings
+from nazbeen_forex_ai.structure.swings import detect_swings
 from nazbeen_forex_ai.structure.types import candles_to_df
 
 
 def mtf_bias(candles_h1: list[Any], candles_m15: list[Any], candles_m5: list[Any], candles_m1: list[Any]) -> dict[str, Any]:
     def bias_from_swings(c: list[Any]) -> str:
-        df = candles_to_df(c)
-        sw = detect_swings(df, left=2, right=2)
-        cls = classify_structure(sw)
-        if len(cls) < 2:
+        if not c:
             return "NEUTRAL"
-        # look for last HH vs LL pattern
-        last = cls[-1]
-        prev = cls[-2]
-        # rough
-        return "BULLISH" if last["swing"]["type"] == "low" else "BEARISH" if last["swing"]["type"] == "high" else "NEUTRAL"
+        df = candles_to_df(c)
+        # left=1/right=1 gives enough swing density for a bias read on short series.
+        sw = detect_swings(df, left=1, right=1)
+        highs = [s for s in sw if s.type == "high"]
+        lows = [s for s in sw if s.type == "low"]
+        bull = 0
+        bear = 0
+        # Classic structure read: compare consecutive swing highs (HH/LH) and
+        # consecutive swing lows (HL/LL). Higher-high/higher-low = bullish.
+        for series in (highs, lows):
+            for a, b in zip(series, series[1:]):
+                if b.price > a.price:
+                    bull += 1
+                elif b.price < a.price:
+                    bear += 1
+        if bull > bear:
+            return "BULLISH"
+        if bear > bull:
+            return "BEARISH"
+        return "NEUTRAL"
 
     return {
         "H1": bias_from_swings(candles_h1),

@@ -70,3 +70,8 @@ def test_mt5_candles_endpoint_returns_mock_data(api: APIClient) -> None:
     assert "candles" in data
     assert data["candles"][0]["time"].endswith("Z")
     assert "data_source" in data
+    # Test isolation (Phase 11A): the suite must run against the mock provider
+    # regardless of any local .env (audit CRIT-04). Mock data is always labeled.
+    assert data["data_source"] == "mock", (
+        f"expected mock provider in tests, got {data['data_source']!r}"
+    )

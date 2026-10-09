@@ -62,6 +62,11 @@ class StructureEvent:
     index: int | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
+    # Formation = when the pattern's defining candle(s) occurred; confirmation =
+    # the bar at which the event became knowable (no look-ahead). Distinguishing
+    # the two prevents backdating signals (audit M-10).
+    formation_time: datetime | None = None
+    confirmed_at: datetime | None = None
     level: float | None = None
     levels: list[float] | None = None
     details: dict[str, Any] | None = None
@@ -79,6 +84,10 @@ class StructureEvent:
             d["start_time"] = to_utc_z(self.start_time)
         if self.end_time:
             d["end_time"] = to_utc_z(self.end_time)
+        if self.formation_time:
+            d["formation_time"] = to_utc_z(self.formation_time)
+        if self.confirmed_at:
+            d["confirmed_at"] = to_utc_z(self.confirmed_at)
         return d
 
 

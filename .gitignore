@@ -1,0 +1,34 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets — NEVER commit real credentials (MASTER_SPEC §7)
+.env
+*.pem
+*.key
+
+# Local database and runtime artifacts
+db.sqlite3
+staticfiles/
+media/
+logs/
+*.log
+
+# Uploaded screenshots (user data — never commit, MASTER_SPEC §7)
+screenshots/
+
+# Test/tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / frontend (Phase 9)
+node_modules/
+.next/

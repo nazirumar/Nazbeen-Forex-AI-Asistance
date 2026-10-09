@@ -1,0 +1,56 @@
+# Docker Compose for Nazbeen Forex AI Asistance — development services only.
+#
+# The Django backend and Next.js frontend run natively on Windows 11 (the MT5
+# worker and Windows integration cannot run in Docker). This file provides the
+# two *dependent* services the backend needs locally: PostgreSQL and Redis.
+#
+# Required: Docker Desktop for Windows with WSL2 backend enabled, and a current
+# `docker compose` (v2) plugin. Start with:
+#
+#     docker compose up -d
+#
+# The credentials below match the DATABASE_URL / REDIS_URL examples in
+# `.env.example`. If you already run native PostgreSQL/Redis on Windows, you do
+# NOT need this file — point DATABASE_URL/REDIS_URL at those services instead.
+
+name: nazbeen-forex-ai
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nazbeen-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nazbeen
+      POSTGRES_PASSWORD: nazbeen
+      POSTGRES_DB: nazbeen_forex
+      # EC2 / production settings run the Django job in UTC; keep the server in UTC too.
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nazbeen -d nazbeen_forex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: nazbeen-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

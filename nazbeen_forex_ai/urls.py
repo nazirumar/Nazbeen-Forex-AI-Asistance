@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/", include("nazbeen_forex_ai.core.urls")),
     path("api/auth/", include("nazbeen_forex_ai.accounts.urls")),
     path("api/", include("nazbeen_forex_ai.marketdata.urls")),
+    path("api/", include("nazbeen_forex_ai.structure.urls")),
     path("api/", include("nazbeen_forex_ai.analysis.urls")),
     path("api/", include("nazbeen_forex_ai.risk.urls")),
     path("api/", include("nazbeen_forex_ai.journal.urls")),

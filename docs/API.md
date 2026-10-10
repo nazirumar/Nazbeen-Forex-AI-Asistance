@@ -76,7 +76,7 @@ Example register response (201):
 
 Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are resilient — if the throttling cache (Redis) is unreachable, auth endpoints still respond (rate limiting degraded). See ADR-008.
 
-## Implemented endpoints (Phases 2–7)
+## Implemented endpoints (Phases 2–7, 11C–11D additions)
 
 > Paths below are live in the repository (verified against `*/urls.py` during the Phase 9
 > documentation audit, 2026-10-09). All require `Authorization: Token <key>` unless noted.
@@ -87,15 +87,23 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 |---|---|---|
 | `GET` | `/api/mt5/status/` | Connection status + broker/server metadata. `mode` is `mock` or `mt5`. Returns `503` when the provider fails. |
 | `GET` | `/api/mt5/symbols/` | Symbol discovery (`?search=`). |
-| `GET` | `/api/mt5/candles/` | OHLCV for `M1/M5/M15/H1` (`?symbol=&timeframe=&count=&start=`). Every response carries `data_source` (`mock`/`mt5`) and UTC `Z` timestamps. |
+| `GET` | `/api/mt5/candles/` | OHLCV for `M1/M5/M15/H1` (`?symbol=&timeframe=&count=&start=`). Every response carries `data_source` (`mock`/`mt5`) and UTC `Z` timestamps. Since Phase 11C/11D it also labels freshness: `market_state` (`open`/`closed`), `stale` (bool), `last_bar_age_sec` (`null` when unknown) and `threshold_sec` — the UI never guesses staleness client-side. |
 | `GET` | `/api/mt5/tick/` | Bid/ask/spread (`?symbol=`). Labeled `data_source`. |
 
-### Screenshot analysis (Phase 4)
+### Market structure (Phase 11D — detector output for the chart)
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/analysis/upload/` | Multipart upload (`image`, optional `symbol`, `timeframe`). Validates image, runs analysis pipeline, persists `ScreenshotAnalysis`. Returns `201` `{analysis_id, result}`. |
+| `GET` | `/api/structure/` | Deterministic ICT/SMC output for `?symbol=&timeframe=&count=` (same validation as candles): `swings`, `events` (BOS/CHOCH/MSS), `fvgs`, `order_blocks`, `liquidity`, plus `mtf` (`H1`/`M15`/`M5`/`M1` biases + `conflicts`). Every event carries its own `type`, `direction`, `index`, `level`/`levels`, `details` and **exact candle timestamps** (`formation_time`/`confirmed_at` etc.) so the chart can anchor overlays without inventing structure. A timeframe whose data cannot be fetched yields bias `null` (unavailable) — **never** a fabricated `NEUTRAL`. Same freshness labels as candles (`market_state`, `stale`, `last_bar_age_sec`, `threshold_sec`). Provider failure → `503` with a generic message. |
+
+### Screenshot analysis (Phase 4, history in 11D)
+
+| Method | Path | Notes |
+|---|---|---|
+| `POST` | `/api/analysis/upload/` | Multipart upload (`image`, optional `symbol`, `timeframe`). Validates image (PNG/JPEG, 5 MB, strict content/extension match), runs the analysis pipeline, persists `ScreenshotAnalysis` + screenshot. Returns `201` `{analysis_id, screenshot_stored, result}`; `screenshot_stored` is `false` when persistence failed (the record is kept, the UI says so). |
+| `GET` | `/api/analysis/` | **(11D)** Owner-scoped history: newest-first list `{analyses: [{id, symbol, timeframe, created_at, decision, summary, data_source, screenshot_stored}]}`. Strictly the caller's own rows. |
 | `GET` | `/api/analysis/{uuid}/` | Retrieve a saved analysis (owner-only). |
+| `GET` | `/api/analysis/{uuid}/screenshot/` | **(11C)** The stored screenshot for an analysis the caller owns (binary). `404` for non-owners and when nothing was stored. |
 
 ### Risk / trade planning (Phase 5 — analysis-only)
 
@@ -108,7 +116,7 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/api/journal/entries/` | Create a journal entry. |
-| `GET` | `/api/journal/search/?q=` | Search the caller's own entries. |
+| `GET` | `/api/journal/search/?q=` | Search the caller's own entries (`q` filters note text). Since 11D each row also includes `timeframe`, `scenario_decision`, `rr` and `created_at` (additive fields; older clients unaffected). |
 | `POST` | `/api/mentor/ask/` | Context-aware mentor answer; references only the caller's saved analyses. |
 
 ### WebSocket (Phase 10 — read-only operational status)

@@ -29,7 +29,17 @@ class JournalListView(APIView):
         return Response(
             {
                 "entries": [
-                    {"id": str(e.id), "symbol": e.symbol, "outcome": e.outcome, "notes": e.notes}
+                    {
+                        "id": str(e.id),
+                        "symbol": e.symbol,
+                        "timeframe": e.timeframe,
+                        "scenario_decision": e.scenario_decision,
+                        "outcome": e.outcome,
+                        "rr": e.rr,
+                        "notes": e.notes,
+                        # UTC ISO-8601, same convention as every other endpoint.
+                        "created_at": e.created_at.isoformat().replace("+00:00", "Z"),
+                    }
                     for e in entries
                 ]
             },

@@ -115,6 +115,37 @@ class AnalysisDetailView(APIView):
         return Response({"analysis": analysis.structured_output}, status=status.HTTP_200_OK)
 
 
+class AnalysisListView(APIView):
+    """Owner-scoped analysis history (Phase 11D — save & reopen).
+
+    Returns only the caller's own analyses (newest first, capped at 100) with
+    the summary fields the history table needs. The full analysis body —
+    including evidence, disagreements and uncertainty — comes from
+    ``GET /api/analysis/{uuid}/``; nothing here is aggregated or inferred.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request) -> Response:
+        rows = ScreenshotAnalysis.objects.filter(user=request.user).order_by("-created_at")[:100]
+        analyses = []
+        for a in rows:
+            structured = a.structured_output or {}
+            analyses.append(
+                {
+                    "id": str(a.id),
+                    "symbol": a.symbol,
+                    "timeframe": a.timeframe,
+                    "created_at": a.created_at.isoformat().replace("+00:00", "Z"),
+                    "decision": structured.get("decision"),
+                    "summary": (a.ai_summary or structured.get("summary") or "")[:300],
+                    "data_source": structured.get("source"),
+                    "screenshot_stored": bool(a.image_path),
+                }
+            )
+        return Response({"analyses": analyses}, status=status.HTTP_200_OK)
+
+
 class AnalysisScreenshotView(APIView):
     """Ownership-scoped screenshot retrieval (audit H-02)."""
 

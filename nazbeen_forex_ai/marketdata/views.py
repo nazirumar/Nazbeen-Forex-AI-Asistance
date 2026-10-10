@@ -18,6 +18,7 @@ import re
 from datetime import datetime
 from typing import Any, Optional
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -25,7 +26,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from nazbeen_forex_ai.marketdata.factory import get_market_data_provider
-from nazbeen_forex_ai.marketdata.freshness import market_state
+from nazbeen_forex_ai.marketdata.freshness import assess_staleness, market_state
 from nazbeen_forex_ai.marketdata.providers import MarketDataProviderError
 
 logger = logging.getLogger(__name__)
@@ -163,6 +164,14 @@ class MT5CandlesView(APIView):
         try:
             provider.connect()
             candles = provider.get_candles(symbol=symbol, timeframe=timeframe, start=start_dt, count=count)
+            # Freshness labels (Phase 11D): real age of the newest bar — the
+            # dashboard's data-freshness indicator reads these. With no bars
+            # the age is unknown (None), never dressed up as fresh.
+            freshness = assess_staleness(
+                candles[-1].time if candles else None,
+                timeframe,
+                threshold_sec=int(settings.MT5_STALENESS_THRESHOLD_SEC),
+            )
             return Response(
                 {
                     "symbol": symbol,
@@ -170,6 +179,10 @@ class MT5CandlesView(APIView):
                     "count": len(candles),
                     "candles": [c.to_dict() for c in candles],
                     "data_source": provider_mode(provider),
+                    "market_state": market_state(),
+                    "stale": freshness["stale"],
+                    "last_bar_age_sec": freshness["last_bar_age_sec"],
+                    "threshold_sec": freshness["threshold_sec"],
                 },
                 status=status.HTTP_200_OK,
             )

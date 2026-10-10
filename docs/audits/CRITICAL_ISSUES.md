@@ -29,6 +29,19 @@ historical finding; per-issue verification with test names and live evidence liv
 > reach `entry_levels`/`sl`/`tp`. LangGraph orchestration remains open as an owner decision
 > (ADR-011); H-04's symbol/timeframe defaults are unchanged (still open).
 
+> **Phase 11C update (2026-10-10):** WS-B / `RECOMMENDED_FIXES.md` **P1.1–P1.8** are
+> implemented (`PHASE_11C.md`): H-02 screenshots now persist under `MEDIA_ROOT/screenshots`
+> with server-generated names + an ownership-scoped retrieval endpoint; H-04's fabrication
+> guard no longer defaults to `EURUSD`/`M15` (missing identity → `null` + WAIT) and mock or
+> stale data can never satisfy the synchronization check; H-05 emits a real MTF `conflicts`
+> list across H1/M15/M5/M1 (auxiliary timeframes actually fetched); H-09 wires the dead
+> connector config (credentials, broker symbol suffix) into the factory and adds
+> last-bar staleness + weekend market-closure labeling; M-03/M-05/L-02 return **400/503/500
+> with generic messages** (validated input, exception text only in server logs); M-04's mode
+> label is derived from the provider class hierarchy; M-07/P-02/P-03 (chronology validation,
+> non-walk-forward fallback marking, one-signal-per-trade) and M-08 (no fabricated confidence
+> intervals) are closed. **H-04's price-level half was already structurally closed in 11B.**
+
 | ID | Status | Notes |
 |---|---|---|
 | CRIT-01 | ✅ resolved | Real SL/TP simulation, costs, honest metrics, injectable strategy |
@@ -37,30 +50,36 @@ historical finding; per-issue verification with test names and live evidence liv
 | CRIT-04 | ✅ resolved | `MT5_USE_MOCK=True` in test settings; factory-contamination test |
 | CRIT-05 | ✅ resolved | Evidence-based UTC offset (live-measured +3.0002 h) + future rejection |
 | H-01 | ✅ resolved | Strict Pillow validation; view returns safe 400s |
-| H-02 | ⛔ open | Screenshot persistence / `MEDIA_ROOT` — 11B |
+| H-02 | ✅ resolved | Screenshots persist under `MEDIA_ROOT/screenshots` (server-generated names); ownership-scoped retrieval endpoint; traversal refused (Phase 11C) |
 | H-03 | 🟡 partial | Real OpenAI/Gemini vision+reasoning providers implemented & tested (Phase 11B); LangGraph → owner decision (ADR-011) |
-| H-04 | ⛔ open | Fabrication guard redesign — 11B (note: LLM price levels can no longer reach entry/SL/TP at all since Phase 11B) |
-| H-05 | 🟡 partial | Bias heuristic fixed + repro passes; LLM subordination to deterministic engine done (Phase 11B); conflicts list remains |
+| H-04 | ✅ resolved | No fabricated chart identity (missing symbol/timeframe → `null` + WAIT); mock/stale data never synchronized (Phase 11C; LLM price levels structurally barred since 11B) |
+| H-05 | ✅ resolved | Bias heuristic fixed (11A); LLM subordination (11B); real `conflicts` across H1/M15/M5/M1 with auxiliary fetches (Phase 11C) |
 | H-06 | ✅ resolved | Correct pip value per lot; exact 1.00-lot EURUSD repro |
 | H-07 | ⛔ open | Frontend login — 11B+ |
 | H-08 | ⛔ open | Dashboard scope — 11B+ |
-| H-09 | 🟡 partial | Timestamps/`symbol_select`/connector tests added; credentials, suffix, staleness → 11B |
+| H-09 | ✅ resolved | Credentials/suffix wired into factory, staleness + market-closure labeling, mocked-connector tests (Phase 11C; timestamps/symbol_select earlier) |
 | H-10 | ⛔ open | Documentation errata pass — 11B |
 | M-01 | ✅ resolved | Mock tick uses `datetime.now(timezone.utc)` |
 | M-02 | ✅ resolved | Unknown timeframe raises `MarketDataProviderError` |
-| M-03 | ⛔ open | `count` serializer validation — 11B |
-| M-04 | ⛔ open | Provider-mode label — 11B |
-| M-05 | 🟡 partial | Non-finite/unknown-symbol → WAIT; serializer + redaction → 11B |
+| M-03 | ✅ resolved | `count`/`symbol`/`timeframe`/`start` validated → 400 (bounded, no DoS) (Phase 11C) |
+| M-04 | ✅ resolved | Mode label derived from provider class hierarchy, incl. error paths (Phase 11C) |
+| M-05 | ✅ resolved | Trade-plan serializer: finite/bounded/typed input → 400; generic internal errors (Phase 11C) |
 | M-06 | ✅ resolved | `get_symbol_spec` returns `None`; never fabricated |
-| M-07 | 🟡 partial | `overall` = aggregation (repro passes); P-02 fallback + sort validation → 11B |
-| M-08 | ⛔ open | Default-params issue — 11B |
+| M-07 | ✅ resolved | `overall` = aggregation (11A); fallback marked non-walk-forward + strict chronology validation (Phase 11C) |
+| M-08 | ✅ resolved | No fabricated confidence interval: `[]` whenever uncalibrated (Phase 11C) |
 | M-09 | ⛔ open | Missing detectors (incl. P-01) — 11B |
 | M-10 | 🟡 partial | `formation_time`/`confirmed_at` on FVG/BOS/OB; liquidity/swings events → 11B |
 | M-11 … M-16 | ⛔ open | Not in 11A scope — 11B |
-| P-01 / P-02 / P-03 | ⛔ open | 11B (P-03 stale-signal reuse is mitigated by the new engine loop; P-02 fallback remains) |
-| L-01 … L-07 | ⛔ open | Not in 11A scope |
+| P-01 | ⛔ open | Equal-high/equal-low detectors (with M-09) — not in 11C scope |
+| P-02 / P-03 | ✅ resolved | train==test fallback explicitly marked NOT walk-forward; one signal consumed per trade (Phase 11C) |
+| L-01, L-03 … L-07 | ⛔ open | Not in 11C scope |
+| L-02 | ✅ resolved | Generic client messages everywhere; exception detail logged server-side only (Phase 11C) |
 
 **Suite after 11A:** `uv run pytest` → 145 passed · `manage.py check` → clean ·
+`makemigrations --check --dry-run` → no changes.
+
+**Suite after 11C (2026-10-10):** `uv run pytest` → **286 passed** ·
+`uv run pytest docs/audits/repro` → **15 passed** · `manage.py check` → clean ·
 `makemigrations --check --dry-run` → no changes.
 
 ## Repro index

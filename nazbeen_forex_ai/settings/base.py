@@ -228,6 +228,19 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# --- Media (uploaded screenshots — audit H-02) ------------------------------
+# Screenshots are persisted server-side under MEDIA_ROOT/screenshots with
+# server-generated names; retrieval is ownership-scoped through the API.
+# MEDIA_ROOT is git-ignored (user data — never committed, MASTER_SPEC §7).
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(env_str("MEDIA_ROOT", str(BASE_DIR / "media")))
+
+# --- Market-data freshness (audit H-09) -------------------------------------
+# Last-bar age (seconds) above which candle data is labeled stale; the effective
+# limit is max(this, 1.5× the timeframe length) so a still-forming bar is never
+# flagged. Stale data can never authorize a decision or price levels.
+MT5_STALENESS_THRESHOLD_SEC = env_int("MT5_STALENESS_THRESHOLD_SEC", 900)
+
 # --- REST framework -------------------------------------------------------
 
 REST_FRAMEWORK = {

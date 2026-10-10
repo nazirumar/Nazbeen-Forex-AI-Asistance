@@ -34,13 +34,25 @@ def mtf_bias(candles_h1: list[Any], candles_m15: list[Any], candles_m5: list[Any
             return "BEARISH"
         return "NEUTRAL"
 
-    return {
+    biases = {
         "H1": bias_from_swings(candles_h1),
         "M15": bias_from_swings(candles_m15),
         "M5": bias_from_swings(candles_m5),
         "M1": bias_from_swings(candles_m1),
-        "conflicts": [],
     }
+    # Real conflicts (audit H-05): every pair of timeframes with a decisive
+    # (non-NEUTRAL) bias that disagrees is reported. NEUTRAL means "no
+    # structural evidence" and never counts as agreement or conflict.
+    order = ["H1", "M15", "M5", "M1"]
+    decisive = [(tf, biases[tf]) for tf in order if biases[tf] in ("BULLISH", "BEARISH")]
+    conflicts: list[str] = []
+    for i in range(len(decisive)):
+        for j in range(i + 1, len(decisive)):
+            tf_a, bias_a = decisive[i]
+            tf_b, bias_b = decisive[j]
+            if bias_a != bias_b:
+                conflicts.append(f"{tf_a} {bias_a} vs {tf_b} {bias_b}")
+    return {**biases, "conflicts": conflicts}
 
 
 def evaluate_scenario(candles_m15: list[Any], candles_m5: list[Any], candles_m1: list[Any]) -> dict[str, Any]:

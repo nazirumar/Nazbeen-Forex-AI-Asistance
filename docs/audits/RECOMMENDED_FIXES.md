@@ -30,6 +30,15 @@ test to reach green (AGENTS.md).
 | P1.7 | Mock tick `utcnow` NameError; unknown-timeframe rejection; error-path mode label | M-01, M-02, M-04 | `marketdata/mock.py`, `views.py` |
 | P1.8 | MT5 connector: wire dead env config into factory; broker symbol **suffix handling**; staleness (last-bar age); market-closure state; mocked-connector unit tests | H-09 | `marketdata/` |
 
+> **P1 status (2026-10-10) — all of P1.1–P1.8 implemented and verified (Phase 11C, except
+> M-01/M-02 which landed in 11A).** Per-fix regression tests were added:
+> `structure/tests/test_mtf_conflicts.py` (P1.1), `analysis/tests/test_fabrication_guard.py`
+> (P1.2), `analysis/tests/test_screenshot_storage.py` (P1.3), `backtesting/tests/test_walkforward_integrity.py`
+> (P1.4), CI assertions in `test_walkforward_integrity.py` (P1.5), `marketdata/tests/test_validation_11c.py`
+> + `risk/tests/test_trade_plan_validation.py` (P1.6), existing M-01/M-02 tests + mode-label
+> tests in `test_validation_11c.py` (P1.7), `marketdata/tests/test_mt5_connector.py` (P1.8).
+> Suite: **286 passed**; repro artifact **15/15**. Details: `docs/PHASE_REPORTS/PHASE_11C.md`.
+
 ## P2 — Frontend & UX (spec §3.I)
 
 | # | Fix | Issues |

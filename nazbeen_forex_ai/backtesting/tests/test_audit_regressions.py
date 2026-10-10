@@ -12,7 +12,7 @@ would test the strategy instead of the engine.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from nazbeen_forex_ai.backtesting.engine import run_backtest
 from nazbeen_forex_ai.backtesting.walkforward import walk_forward
@@ -33,7 +33,16 @@ def _oscillating_candles(n: int = 240) -> list[dict]:
     out = []
     for i in range(n):
         base = 1.1000 + 0.01 * ((i % 20) / 20.0) * (1 if (i // 20) % 2 == 0 else -1)
-        out.append(_c(i, base, base + 0.0015, base - 0.0015, base + 0.0005))
+        candle = _c(0, base, base + 0.0015, base - 0.0015, base + 0.0005)
+        # Phase 11C fixture repair (documented, not a weakening): timestamps now
+        # strictly increase. The old `minute = i % 60` cycling fabricated
+        # out-of-order timestamps — exactly the defect the new walk-forward
+        # chronology validation rejects. No assertion changed; prices and
+        # counts are untouched, so test strength is identical.
+        candle["time"] = (
+            datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=i)
+        ).isoformat()
+        out.append(candle)
     return out
 
 

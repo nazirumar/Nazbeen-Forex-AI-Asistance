@@ -21,6 +21,9 @@ media/
 logs/
 *.log
 
+# Test-written media (Phase 11C screenshot-persistence tests)
+.test_media/
+
 # Uploaded screenshots (user data — never commit, MASTER_SPEC §7)
 screenshots/
 

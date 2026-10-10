@@ -91,6 +91,7 @@ class MT5MarketDataProvider(MarketDataProvider):
         max_retries: int = 3,
         retry_backoff: float = 0.5,
         utc_offset_hours: str | float | None = None,
+        symbol_suffix: str | None = None,
     ) -> None:
         self._path = path
         self._login = login
@@ -99,6 +100,10 @@ class MT5MarketDataProvider(MarketDataProvider):
         self._timeout_sec = timeout_sec
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff
+        # Broker symbol suffix (audit H-09), e.g. "EURUSD" -> "EURUSD.pro".
+        if symbol_suffix is None:
+            symbol_suffix = env_str("MT5_SYMBOL_SUFFIX", "")
+        self._symbol_suffix = (symbol_suffix or "").strip()
         # "auto" (default) measures the broker offset from a live tick; a number
         # pins it explicitly. Never assume a fixed offset without evidence.
         if utc_offset_hours is None:
@@ -204,6 +209,28 @@ class MT5MarketDataProvider(MarketDataProvider):
                 offset = 0.0
         return offset
 
+    def _resolve_symbol(self, symbol: str) -> str:
+        """Resolve a requested symbol against the broker's naming (audit H-09).
+
+        Tries the bare symbol first; when a suffix is configured (e.g. ".pro")
+        and the bare name is not available in MarketWatch, the suffixed name is
+        tried. When neither candidate can be confirmed (terminal API
+        unavailable, symbol unknown) the requested name is returned so the
+        caller surfaces the underlying provider error — never a fabricated
+        symbol.
+        """
+        sym = (symbol or "").upper().strip()
+        candidates = [sym]
+        if self._symbol_suffix and not sym.endswith(self._symbol_suffix):
+            candidates.append(sym + self._symbol_suffix)
+        for candidate in candidates:
+            try:
+                if mt5.symbol_select(candidate, True):
+                    return candidate
+            except Exception:  # pragma: no cover - MT5 runtime
+                continue
+        return sym
+
     def get_symbols(self, search: str | None = None) -> list[dict[str, Any]]:
         if not self.is_connected():
             raise MarketDataProviderError("not connected")
@@ -236,28 +263,25 @@ class MT5MarketDataProvider(MarketDataProvider):
         tf = TIMEFRAME_MAP.get(timeframe)
         if tf is None:
             raise MarketDataProviderError(f"unsupported timeframe {timeframe}")
-        # Live-validation guard (Phase 11A): copy_rates fails with "Call failed"
-        # when the symbol is not selected in MarketWatch; ensure it is.
-        try:
-            mt5.symbol_select(symbol.upper(), True)
-        except Exception:  # pragma: no cover - MT5 runtime
-            pass
+        # Broker symbol resolution (audit H-09): bare name first, configured
+        # suffix as fallback; also ensures the symbol is in MarketWatch.
+        resolved = self._resolve_symbol(symbol)
 
         if count is not None:
             if start is not None:
-                rates = mt5.copy_rates_from(symbol.upper(), tf, start, count)
+                rates = mt5.copy_rates_from(resolved, tf, start, count)
             else:
-                rates = mt5.copy_rates_from_pos(symbol.upper(), tf, 0, count)
+                rates = mt5.copy_rates_from_pos(resolved, tf, 0, count)
         else:
             if start is None:
                 raise MarketDataProviderError("either start+count or count from now required")
             # count from start? approximate by large count not ideal; require count
-            rates = mt5.copy_rates_from(symbol.upper(), tf, start, 1000)
+            rates = mt5.copy_rates_from(resolved, tf, start, 1000)
 
         if rates is None:
             err = mt5.last_error()
             raise MarketDataProviderError(f"copy_rates failed: {err}")
-        offset_sec = self._resolve_offset_seconds(symbol)
+        offset_sec = self._resolve_offset_seconds(resolved)
         candles: list[Candle] = []
         for r in rates:
             t = normalize_mt5_epoch(r[0], offset_sec)
@@ -279,18 +303,19 @@ class MT5MarketDataProvider(MarketDataProvider):
     def get_tick(self, symbol: str) -> dict[str, Any]:
         if not self.is_connected():
             raise MarketDataProviderError("not connected")
-        info = mt5.symbol_info_tick(symbol.upper())
+        resolved = self._resolve_symbol(symbol)
+        info = mt5.symbol_info_tick(resolved)
         if info is None:
             err = mt5.last_error()
             raise MarketDataProviderError(f"symbol_info_tick failed: {err}")
-        offset_sec = self._resolve_offset_seconds(symbol)
+        offset_sec = self._resolve_offset_seconds(resolved)
         tick_time = normalize_mt5_epoch(info.time, offset_sec)
         if tick_time > datetime.now(timezone.utc) + timedelta(minutes=5):
             raise MarketDataProviderError(
                 f"impossible future tick timestamp after UTC normalization: {tick_time.isoformat()}"
             )
         return {
-            "symbol": symbol.upper(),
+            "symbol": resolved,
             "bid": float(info.bid),
             "ask": float(info.ask),
             "spread": float(info.ask - info.bid) if info.ask and info.bid else None,

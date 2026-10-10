@@ -21,17 +21,19 @@ def evaluate_probability(features: List[Dict[str, Any]]) -> ProbResult:
         return ProbResult(
             probability=None,
             calibrated=False,
-            confidence_interval=[0.0, 1.0],
+            confidence_interval=[],
             sample_size=len(features),
             reason="Insufficient validated evidence (< 30 samples)",
             metrics={},
         )
-    # stub: do not fabricate calibrated probabilities
+    # stub: do not fabricate calibrated probabilities.
+    # Audit M-08: an uncalibrated model reports NO confidence interval —
+    # any interval here would be a fabricated figure (MASTER_SPEC §7).
     return ProbResult(
         probability=None,
         calibrated=False,
-        confidence_interval=[0.3, 0.7],
+        confidence_interval=[],
         sample_size=len(features),
-        reason="Model calibration not performed; returning null",
+        reason="Model calibration not performed; returning null (no CI without calibration)",
         metrics={"brier_score": None},
     )

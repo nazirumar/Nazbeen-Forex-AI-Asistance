@@ -29,7 +29,7 @@ each docstring.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from django.urls import reverse
@@ -282,7 +282,16 @@ def _oscillating_candles(n: int = 240) -> list[dict]:
     out = []
     for i in range(n):
         base = 1.1000 + 0.01 * ((i % 20) / 20.0) * (1 if (i // 20) % 2 == 0 else -1)
-        out.append(_c(i % 60, base, base + 0.0015, base - 0.0015, base + 0.0005))
+        candle = _c(0, base, base + 0.0015, base - 0.0015, base + 0.0005)
+        # Phase 11C fixture repair (documented, not a weakening): the old
+        # `_c(i % 60, ...)` cycling fabricated out-of-order timestamps — the
+        # exact defect the new walk-forward chronology validation rejects.
+        # Timestamps now strictly increase; no assertion changed, prices and
+        # counts untouched: test strength identical.
+        candle["time"] = (
+            datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=i)
+        ).isoformat()
+        out.append(candle)
     return out
 
 

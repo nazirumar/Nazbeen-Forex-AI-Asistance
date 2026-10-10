@@ -5,8 +5,11 @@
 
 ## Current phase
 
-**Phase 11B - Real Vision & Reasoning LLM Providers** - completed 2026-10-09 -
-**awaiting owner approval before any further 11B scope**
+**Phase 11C - Remaining Data Integrity and Safety Remediation** - completed 2026-10-10 -
+**awaiting owner approval before the dashboard / next phase**
+
+> Phase 11B (Real Vision & Reasoning LLM Providers) completed 2026-10-09 - see
+> `docs/PHASE_REPORTS/PHASE_11B.md`; live Gemini verification landed the same day.
 
 ## Completed phases
 
@@ -24,6 +27,7 @@
 | 10 | Infra & Ops (Roadmap Phase 10) | `docs/PHASE_REPORTS/PHASE_10.md` | 2026-10-09 |
 | 11A | Critical Correctness Remediation (audit fixes) | `docs/PHASE_REPORTS/PHASE_11A.md` + `docs/audits/PHASE_11A_FIX_VERIFICATION.md` | 2026-10-09 |
 | 11B | Real Vision & Reasoning LLM Providers | `docs/PHASE_REPORTS/PHASE_11B.md` | 2026-10-09 |
+| 11C | Remaining Data Integrity and Safety Remediation (WS-B / P1.1-P1.8) | `docs/PHASE_REPORTS/PHASE_11C.md` | 2026-10-10 |
 
 ## Completed features
 
@@ -40,7 +44,7 @@
   resilient rate limiting (ADR-008) so throttled endpoints don't 500 when Redis is down.
 - Next.js 15 frontend (TypeScript + Tailwind): dashboard shell, auth panel, health/status cards,
   direct-backend API helper (CORS), frontend `/api/health` probe. Builds/typechecks clean.
-- Test harness: pytest + pytest-django, **145 tests passing** (2026-10-09, full suite; 78 pre-11A + 67 added in 11A).
+- Test harness: pytest + pytest-django, **286 tests passing** (2026-10-10, full suite; 78 pre-11A + 67 in 11A + 55 in 11B + 86 in 11C).
 - CI workflow (`.github/workflows/ci.yml`): backend (`check`, `makemigrations --check --dry-run`, `pytest`) + frontend (`npm ci`, `typecheck`, `build`).
 - Dev tooling: `docker-compose.yml` (Postgres + Redis, plus an `app` profile adding
   backend/worker/frontend containers), PowerShell scripts (`scripts/start-infra.ps1`,
@@ -78,6 +82,7 @@
   aggregation fix (M-07 partial); all 15 audit repro tests migrated into app test packages
   and passing.
 - **Phase 11B - real vision/reasoning LLM providers**: configurable OpenAI + Gemini adapters (`analysis/llm_providers.py`) with typed Pydantic claim schemas (no decision field), hardened HTTP transport (timeout, retries, 429/Retry-After, secret redaction), deterministic authority over every LLM claim, loud non-mock failure handling, and `manage.py llm_smoke` (H-03 real-provider half; H-05 LLM subordination; ADR-011).
+- **Phase 11C - remaining data integrity & safety remediation (WS-B / P1.1-P1.8)**: screenshots persisted under `MEDIA_ROOT/screenshots` with server-generated names + ownership-scoped retrieval endpoint (H-02); fabrication guard without `EURUSD`/`M15` defaults - missing identity yields `null` + WAIT, mock/stale data can never synchronize or authorize price levels (H-04); real MTF `conflicts` across H1/M15/M5/M1 with auxiliary timeframe fetches (H-05); walk-forward chronology validation + explicit not-walk-forward fallback marking (M-07/P-02) and one-signal-per-trade tests (P-03); no fabricated confidence intervals (`[]` whenever uncalibrated, M-08); strict 400 validation for candle queries and trade-plan requests with generic, log-only error details (M-03/M-05/L-02); provider mode derived from the class hierarchy (M-04); MT5 credentials/suffix wired into the factory, last-bar staleness + weekend market-closure labeling (H-09). 86 new tests.
 
 ## Incomplete features (not yet implemented)
 
@@ -97,6 +102,7 @@
 - Docker stack (backend/worker/frontend images) written but never built — no Docker on the dev machine.
 - Redis channel layer (`USE_REDIS_CHANNELS=true`) configured but only the in-memory layer is tested.
 - CI workflow not yet executed on GitHub (runs locally-verified commands).
+- MT5 suffix handling, staleness and the weekend market-closure heuristic (Phase 11C) are verified against a mocked connector only; live-broker symbol naming and holiday calendars remain manual/local verification. `MEDIA_ROOT` serving for production (reverse proxy) is not wired — the screenshot API streams files itself.
 
 - Real-provider LLM behavior is verified only for Google Gemini (`gemini-3.8-flash`, live-tested 2026-10-09); OpenAI adapter paths remain unit-tested only. Google retires models without notice (`gemini-2.5-flash` now → HTTP 404) — keep `*_LLM_MODEL` current.
 
@@ -104,9 +110,9 @@
 
 - Live LLM verification (Phase 11B, 2026-10-09): real Gemini reasoning + vision HTTP 200 via `manage.py llm_smoke`; end-to-end `analyze()` with real MT5 data → deterministic SELL retained over a bullish LLM reading (disagreement recorded, `resolved=True`); transient Google 503s surfaced loudly in `errors`, never mocked.
 
-- `uv run pytest` → **200 passed, 0 failed** (2026-10-09, Phase 11B (55 new LLM tests); ~14 s — hermetic mock-only)
-- `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated)
-- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations
+- `uv run pytest` → **286 passed, 0 failed** (2026-10-10, Phase 11C (86 new tests); 200 at 11B end; hermetic mock-only)
+- `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated; 11C repaired two out-of-order fixture generators, no assertions changed)
+- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-10)
 - Frontend `tsc --noEmit` → exit 0 (2026-10-09)
 - Live smoke test: `GET /api/health/` → `200 OK` on runserver (2026-10-08)
 - Live MT5 timestamp check (11A.5): auto-measured server offset +3.0002 h; candles normalized
@@ -114,11 +120,11 @@
 
 ## Next phase
 
-- **Phase 11B - real vision/reasoning LLM providers: COMPLETED 2026-10-09**
-  (`docs/PHASE_REPORTS/PHASE_11B.md`). Remaining audit remediation (H-02, H-04,
-  H-10, M-03/M-04/M-05 remainder, M-08-M-16, P-02, MTF conflicts, frontend
-  H-07/H-08) and LangGraph (ADR-011): **NOT started - explicit owner approval
-  required. Approval is never implied.**
+- **Phase 11C - remaining data integrity & safety remediation: COMPLETED 2026-10-10**
+  (`docs/PHASE_REPORTS/PHASE_11C.md`). Remaining audit remediation (P-01/M-09
+  detectors, M-10..M-16, H-10 docs pass, L-01/L-03..L-07, frontend H-07/H-08)
+  and the dashboard: **NOT started - explicit owner approval required.
+  Approval is never implied.**
 
 ## Blockers
 
@@ -131,4 +137,5 @@
 - Phase 10 docs (`PHASE_10.md`, ADR-010, `OPERATIONS.md`, API.md, this file) — the commit(s)
   following `5fb5408` (see `git log`).
 - `15f96ff` - Phase 11A implementation (code, tests, docs).
-- Phase 11B LLM providers (`docs/PHASE_REPORTS/PHASE_11B.md`, ADR-011, this file) - the commit(s) following `15f96ff` (see `git log`).
+- Phase 11B LLM providers (`5b6a518`) and live Gemini verification (`a0f4b89`).
+- Phase 11C remediation (`docs/PHASE_REPORTS/PHASE_11C.md`, audit status banners, this file) - the commit following `a0f4b89` (see `git log`).

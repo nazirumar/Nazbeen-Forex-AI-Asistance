@@ -42,6 +42,11 @@ MT5_USE_MOCK = True
 # sessions — no network access, no keys required).
 USE_MOCK_LLM = True
 
+# --- Test isolation for media (Phase 11C, audit H-02) -------------------------
+# Screenshot persistence tests write real files; keep them out of the dev
+# `media/` tree and the repository (git-ignored).
+MEDIA_ROOT = BASE_DIR / ".test_media"
+
 # Tests never talk to a real broker: tasks run synchronously in-process.
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True

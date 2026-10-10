@@ -23,6 +23,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from django.conf import settings
+
 from nazbeen_forex_ai.analysis.llm import (
     LLMError,
     get_llm_provider,
@@ -36,10 +38,14 @@ from nazbeen_forex_ai.analysis.schemas import (
     validate_analysis_output,
 )
 from nazbeen_forex_ai.marketdata.factory import get_market_data_provider
+from nazbeen_forex_ai.marketdata.freshness import assess_staleness, market_state
 from nazbeen_forex_ai.structure.swings import detect_swings, classify_structure
 from nazbeen_forex_ai.structure.fvg import detect_fvg
 from nazbeen_forex_ai.structure.analysis import mtf_bias, evaluate_scenario
 from nazbeen_forex_ai.structure.types import candles_to_df
+
+# Canonical higher/lower timeframes analyzed alongside the requested one (H-05).
+CANONICAL_TIMEFRAMES = ("H1", "M15", "M5", "M1")
 
 
 def to_candle_dicts(candles) -> List[Dict[str, Any]]:
@@ -103,17 +109,27 @@ class ScreenshotAnalysisService:
 
     def retrieve_market_data(self, symbol: str, timeframe: str, count: int = 100) -> Dict[str, Any]:
         provider = get_market_data_provider()
+        state = market_state()
         try:
             provider.connect()
             info = provider.get_connection_info()
             candles = provider.get_candles(symbol=symbol.upper(), timeframe=timeframe, count=count)
+            candle_dicts = to_candle_dicts(candles)
+            # Freshness (audit H-09): the last-bar age is measured, never assumed.
+            fresh = assess_staleness(
+                candle_dicts[-1].get("time") if candle_dicts else None,
+                timeframe,
+                threshold_sec=settings.MT5_STALENESS_THRESHOLD_SEC,
+            )
             return {
                 "symbol": symbol.upper(),
                 "timeframe": timeframe,
-                "candles": to_candle_dicts(candles),
+                "candles": candle_dicts,
                 "source": info.get("mode", "unknown"),
                 "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "stale": False,
+                "stale": fresh["stale"],
+                "last_bar_age_sec": fresh["last_bar_age_sec"],
+                "market_state": state,
             }
         except Exception as e:
             return {
@@ -124,7 +140,26 @@ class ScreenshotAnalysisService:
                 "error": str(e),
                 "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "stale": True,
+                "last_bar_age_sec": None,
+                "market_state": state,
             }
+
+    def retrieve_aux_timeframes(self, symbol: str, primary_timeframe: str) -> Dict[str, List[Dict[str, Any]]]:
+        """Fetch the other canonical timeframes for a real multi-timeframe read (H-05).
+
+        A failed/missing timeframe degrades to ``[]`` (neutral) — never fabricated.
+        """
+        aux: Dict[str, List[Dict[str, Any]]] = {}
+        primary = (primary_timeframe or "").upper()
+        for tf in CANONICAL_TIMEFRAMES:
+            if tf == primary:
+                continue
+            try:
+                md_tf = self.retrieve_market_data(symbol, tf, count=100)
+                aux[tf] = md_tf.get("candles", []) or []
+            except Exception:
+                aux[tf] = []
+        return aux
 
     def reconcile(self, deterministic: Dict[str, Any], ai: Dict[str, Any]) -> List[DisagreementItem]:
         disagreements: List[DisagreementItem] = []
@@ -192,24 +227,38 @@ class ScreenshotAnalysisService:
             )
         return out
 
-    def build_deterministic_signals(self, md: Dict[str, Any]) -> Dict[str, Any]:
+    def build_deterministic_signals(
+        self,
+        md: Dict[str, Any],
+        aux_candles: Dict[str, List[Dict[str, Any]]] | None = None,
+    ) -> Dict[str, Any]:
         signals: Dict[str, Any] = {}
         if not md.get("candles"):
             return signals
+        aux_candles = aux_candles or {}
+        primary_tf = (md.get("timeframe") or "M15").upper()
+        # Map each canonical timeframe to its candles; the analyzed timeframe
+        # supplies its own data, the others come from the auxiliary fetches.
+        by_tf: Dict[str, List[Dict[str, Any]]] = {}
+        for tf in CANONICAL_TIMEFRAMES:
+            by_tf[tf] = md["candles"] if tf == primary_tf else (aux_candles.get(tf) or [])
         df = candles_to_df(md["candles"])
         sw = detect_swings(df, left=2, right=2)
         cls = classify_structure(sw)
         fvg = detect_fvg(df)
-        bias = mtf_bias([], md["candles"], [], [])
-        scen = evaluate_scenario(md["candles"], [], [])
+        # Real multi-timeframe bias + conflicts across H1/M15/M5/M1 (audit H-05).
+        bias = mtf_bias(by_tf["H1"], by_tf["M15"], by_tf["M5"], by_tf["M1"])
+        # Scenario decision stays anchored to the analyzed timeframe's structure.
+        scen = evaluate_scenario(md["candles"], by_tf.get("M5", []), by_tf.get("M1", []))
         signals.update(
             {
                 "swings_count": len(sw),
                 "structure_labels": [c["label"] for c in cls[-10:]],
                 "fvg_count": len(fvg),
                 "bias_m15": bias.get("M15"),
+                "bias_mtf": {tf: bias.get(tf) for tf in CANONICAL_TIMEFRAMES},
                 "scenario_decision": scen.get("decision"),
-                "mtf_conflicts": scen.get("mtf_conflicts", []),
+                "mtf_conflicts": bias.get("conflicts", []),
             }
         )
         return signals
@@ -234,7 +283,7 @@ class ScreenshotAnalysisService:
         return data, str(mime)
 
     def build_analysis_prompt(
-        self, symbol: str, timeframe: str, md: Dict[str, Any], det_signals: Dict[str, Any]
+        self, symbol: str | None, timeframe: str | None, md: Dict[str, Any], det_signals: Dict[str, Any]
     ) -> str:
         closes = [c.get("close") for c in md.get("candles", [])[-10:]]
         return json.dumps(
@@ -244,6 +293,8 @@ class ScreenshotAnalysisService:
                 "timeframe": timeframe,
                 "deterministic_findings": {
                     "bias_m15": det_signals.get("bias_m15"),
+                    "bias_mtf": det_signals.get("bias_mtf"),
+                    "mtf_conflicts": det_signals.get("mtf_conflicts", []),
                     "scenario_decision": det_signals.get("scenario_decision"),
                     "fvg_count": det_signals.get("fvg_count"),
                     "swings_count": det_signals.get("swings_count"),
@@ -251,6 +302,7 @@ class ScreenshotAnalysisService:
                 },
                 "recent_closes": closes,
                 "market_data_source": md.get("source"),
+                "market_state": md.get("market_state"),
                 "constraints": [
                     "Never fabricate exact price levels.",
                     "Never claim live synchronization if unknown.",
@@ -289,29 +341,59 @@ class ScreenshotAnalysisService:
         self, image_file=None, user_hints: Dict[str, Any] | None = None, **kwargs
     ) -> ScreenshotAnalysisOutput:
         hints = user_hints or {}
-        symbol, timeframe = self.extract_symbol_timeframe({}, hints)
-        symbol = symbol or "EURUSD"
-        timeframe = timeframe or "M15"
-        self._last_symbol = symbol.upper()
+        raw_symbol, raw_timeframe = self.extract_symbol_timeframe({}, hints)
+        # Fabrication guard (audit H-04): never invent the chart identity.
+        # Missing symbol/timeframe means unknown → no market-data fetch and the
+        # decision stays WAIT. No EURUSD/M15 defaults, ever.
+        symbol = (raw_symbol or "").strip() or None
+        timeframe = (raw_timeframe or "").strip() or None
+        identity_known = bool(symbol and timeframe)
+        self._last_symbol = symbol.upper() if symbol else ""
 
         image_bytes, image_mime = self._read_image(image_file)
 
         md: Dict[str, Any] = {}
-        try:
-            md = self.retrieve_market_data(symbol, timeframe, count=100)
-        except Exception as e:
+        aux_candles: Dict[str, List[Dict[str, Any]]] = {}
+        now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        if identity_known:
+            try:
+                md = self.retrieve_market_data(symbol, timeframe, count=100)
+            except Exception as e:
+                md = {
+                    "symbol": symbol.upper(),
+                    "timeframe": timeframe,
+                    "candles": [],
+                    "source": "unknown",
+                    "error": str(e),
+                    "retrieved_at": now_iso,
+                    "stale": True,
+                    "last_bar_age_sec": None,
+                    "market_state": market_state(),
+                }
+            # Real multi-timeframe read: H1/M15/M5/M1 (audit H-05).
+            aux_candles = self.retrieve_aux_timeframes(symbol, timeframe)
+        else:
             md = {
-                "symbol": symbol.upper() if symbol else symbol,
-                "timeframe": timeframe,
+                "symbol": None,
+                "timeframe": None,
                 "candles": [],
                 "source": "unknown",
-                "error": str(e),
-                "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "retrieved_at": now_iso,
                 "stale": True,
+                "last_bar_age_sec": None,
+                "market_state": market_state(),
             }
 
-        det_signals = self.build_deterministic_signals(md)
-        data_synchronized = md.get("source") in ("mt5", "mock") and bool(md.get("candles"))
+        det_signals = self.build_deterministic_signals(md, aux_candles)
+        # Synchronization check (audit H-04): only fresh, real MT5 data counts
+        # as synchronized. Mock data is simulated — it can never authorize a
+        # BUY/SELL decision or price levels — and stale data is not current
+        # evidence either. Both are labeled loudly instead.
+        data_synchronized = (
+            md.get("source") == "mt5"
+            and bool(md.get("candles"))
+            and not md.get("stale", False)
+        )
         det_decision = det_signals.get("scenario_decision") or "WAIT"
         det_bias = det_signals.get("bias_m15")
         prompt = self.build_analysis_prompt(symbol, timeframe, md, det_signals)
@@ -322,6 +404,28 @@ class ScreenshotAnalysisService:
         errors: List[str] = []
         uncertainty: List[str] = []
         model_labels: Dict[str, str] = {}
+
+        # Honest labeling of data-quality limits (audits H-04/H-09).
+        if not identity_known:
+            uncertainty.append(
+                "Symbol/timeframe not provided; chart identity unknown — no market "
+                "data was fetched and the decision stays WAIT."
+            )
+        elif md.get("source") == "mock":
+            uncertainty.append(
+                "Market data source is mock (simulated, not live pricing); "
+                "decision forced to WAIT."
+            )
+        if md.get("stale") and md.get("candles"):
+            uncertainty.append(
+                "Stale market data: last bar age "
+                f"{md.get('last_bar_age_sec')}s exceeds the freshness threshold."
+            )
+        if md.get("market_state") == "closed":
+            uncertainty.append(
+                "Market session closed at analysis time; prices are from the "
+                "previous session."
+            )
 
         try:
             vision_llm = get_llm_provider("vision")
@@ -357,7 +461,10 @@ class ScreenshotAnalysisService:
             evidence.append(
                 EvidenceItem(
                     type="deterministic_bias",
-                    description=f"M15 bias from confirmed swings: {det_bias}",
+                    description=(
+                        "Multi-timeframe bias from confirmed swings "
+                        f"(H1/M15/M5/M1): {det_signals.get('bias_mtf')}"
+                    ),
                     source="deterministic",
                 )
             )
@@ -373,10 +480,24 @@ class ScreenshotAnalysisService:
             evidence.append(
                 EvidenceItem(
                     type="deterministic_fvg",
-                    description=f"Fair value gaps detected on M15: {det_signals.get('fvg_count')}",
+                    description=(
+                        f"Fair value gaps detected on {timeframe or md.get('timeframe')}: "
+                        f"{det_signals.get('fvg_count')}"
+                    ),
                     source="deterministic",
                 )
             )
+            if det_signals.get("mtf_conflicts"):
+                evidence.append(
+                    EvidenceItem(
+                        type="mtf_conflict",
+                        description=(
+                            "Multi-timeframe bias conflicts: "
+                            + "; ".join(det_signals["mtf_conflicts"])
+                        ),
+                        source="deterministic",
+                    )
+                )
         if vision is not None:
             for obs in vision.observations[:20]:
                 evidence.append(
@@ -433,6 +554,13 @@ class ScreenshotAnalysisService:
             "provider_failures": errors,
         }
 
+        # True only when more than one timeframe actually contributed candles —
+        # never claimed by default.
+        mtf_count = (1 if md.get("candles") else 0) + sum(
+            1 for v in aux_candles.values() if v
+        )
+        uses_mtf_data = mtf_count > 1
+
         combined = {
             "symbol": symbol,
             "timeframe": timeframe,
@@ -450,7 +578,7 @@ class ScreenshotAnalysisService:
             "mtf_conflicts": det_signals.get("mtf_conflicts", []),
             "uncertainty": uncertainty,
             "analysis_timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "uses_mtf_data": True,
+            "uses_mtf_data": uses_mtf_data,
             "data_synchronized": data_synchronized,
             "deterministic_signals": det_signals,
             "ai_explanation": ai_explanation,

@@ -15,3 +15,7 @@ MT5_PASSWORD = env_str("MT5_PASSWORD", "")
 MT5_TIMEOUT_SEC = env_int("MT5_TIMEOUT_SEC", 30)
 MT5_RETRY_MAX = env_int("MT5_RETRY_MAX", 3)
 MT5_RETRY_BACKOFF = float(env_str("MT5_RETRY_BACKOFF", "0.5") or "0.5")
+# Broker symbol suffix (audit H-09): many brokers post-fix symbols, e.g.
+# "EURUSD" -> "EURUSD.pro". When set, the connector tries the bare symbol
+# first and falls back to the suffixed one.
+MT5_SYMBOL_SUFFIX = env_str("MT5_SYMBOL_SUFFIX", "")

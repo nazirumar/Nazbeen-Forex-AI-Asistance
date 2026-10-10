@@ -45,7 +45,17 @@ cp .env.example .env           # local configuration (git-ignored)
 .\scripts\start-infra.ps1
 ```
 
-**Apply migrations and run the backend:**
+**Run backend + frontend together (one command):**
+
+```powershell
+.\scripts\dev.ps1            # migrate once, then backend + frontend in two windows
+```
+
+Opens window 1 → backend at <http://127.0.0.1:8000> and window 2 → frontend at
+<http://localhost:3000>. Each server keeps its own log; close a window to stop
+that server. Use `.\scripts\dev.ps1 -NoMigrate` to skip the initial migrate.
+
+**Apply migrations and run the backend (backend only):**
 
 ```powershell
 .\scripts\dev-backend.ps1      # migrate + runserver at http://127.0.0.1:8000

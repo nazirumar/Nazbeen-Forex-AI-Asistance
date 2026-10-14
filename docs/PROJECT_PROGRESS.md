@@ -5,11 +5,13 @@
 
 ## Current phase
 
-**Phase 11D - Professional Trading Dashboard** - completed 2026-10-10 -
-**awaiting owner approval before Phase 11E**
+**Phase 11E - Advanced ICT/SMC Intelligence and LangGraph** - implemented 2026-10-14 -
+**awaiting owner approval before Phase 11F**
 
-> Phase 11C (data integrity remediation) completed 2026-10-10 - see
-> `docs/PHASE_REPORTS/PHASE_11C.md`. Phase 11B (real LLM providers) 2026-10-09.
+> Phase 11E resolves ADR-011 (LangGraph orchestration implemented and wired - ADR-012).
+> Phase 11D (professional trading dashboard) completed 2026-10-10 - see
+> `docs/PHASE_REPORTS/PHASE_11D.md`. Phase 11C (data integrity remediation) 2026-10-10;
+> Phase 11B (real LLM providers) 2026-10-09.
 
 ## Completed phases
 
@@ -29,6 +31,7 @@
 | 11B | Real Vision & Reasoning LLM Providers | `docs/PHASE_REPORTS/PHASE_11B.md` | 2026-10-09 |
 | 11C | Remaining Data Integrity and Safety Remediation (WS-B / P1.1-P1.8) | `docs/PHASE_REPORTS/PHASE_11C.md` | 2026-10-10 |
 | 11D | Professional Trading Dashboard (frontend + supporting endpoints) | `docs/PHASE_REPORTS/PHASE_11D.md` | 2026-10-10 |
+| 11E | Advanced ICT/SMC Intelligence and LangGraph (WS-D) | `docs/PHASE_REPORTS/PHASE_11E.md` | 2026-10-14 |
 
 ## Completed features
 
@@ -45,7 +48,7 @@
   resilient rate limiting (ADR-008) so throttled endpoints don't 500 when Redis is down.
 - Next.js 15 frontend (TypeScript + Tailwind): dashboard shell, auth panel, health/status cards,
   direct-backend API helper (CORS), frontend `/api/health` probe. Builds/typechecks clean.
-- Test harness: pytest + pytest-django, **303 backend tests passing** (2026-10-10, full suite; 78 pre-11A + 67 in 11A + 55 in 11B + 86 in 11C + 17 in 11D); frontend Vitest suite **92 tests** (2026-10-10, 10 files).
+- Test harness: pytest + pytest-django, **361 backend tests passing** (2026-10-14, full suite; 303 at 11D; +58 in 11E); frontend Vitest suite **111 tests** (2026-10-14, 11 files; 92/10 at 11D).
 - CI workflow (`.github/workflows/ci.yml`): backend (`check`, `makemigrations --check --dry-run`, `pytest`) + frontend (`npm ci`, `typecheck`, `build`).
 - Dev tooling: `docker-compose.yml` (Postgres + Redis, plus an `app` profile adding
   backend/worker/frontend containers), PowerShell scripts (`scripts/start-infra.ps1`,
@@ -95,7 +98,7 @@
 - GitHub-hosted CI execution (workflow exists, not yet run on GitHub).
 - Docker image build/run verification (Docker unavailable on the dev machine — configs untested).
 
-- LangGraph orchestration (MASTER_SPEC section 2): real provider adapters shipped in Phase 11B; graph orchestration awaits the owner decision (ADR-011).
+- LangGraph orchestration (MASTER_SPEC section 2): **implemented and wired in Phase 11E** (ADR-012) — `analyze()` is a façade over a 10-node LangGraph `StateGraph` whose nodes are bound `ScreenshotAnalysisService` methods (the deterministic engine stays authoritative).
 
 ## Known issues
 
@@ -106,27 +109,27 @@
 - MT5 suffix handling, staleness and the weekend market-closure heuristic (Phase 11C) are verified against a mocked connector only; live-broker symbol naming and holiday calendars remain manual/local verification. `MEDIA_ROOT` serving for production (reverse proxy) is not wired — the screenshot API streams files itself.
 
 - Real-provider LLM behavior is verified only for Google Gemini (`gemini-3.8-flash`, live-tested 2026-10-09); OpenAI adapter paths remain unit-tested only. Google retires models without notice (`gemini-2.5-flash` now → HTTP 404) — keep `*_LLM_MODEL` current.
-- Phase 11D frontend behavior is covered by the jsdom unit/integration suite (92 tests); no browser-based visual/e2e verification was run — the owner should click through `/dashboard` against the running backend.
+- Phase 11D/11E frontend behavior is covered by the jsdom unit/integration suite (111 tests, 11 files); no browser-based visual/e2e verification was run — the owner should click through `/dashboard` and `/dashboard/chart` against the running backend.
 - Frontend `npm test` is not yet wired into `.github/workflows/ci.yml` (one-line addition; left for owner confirmation).
 
 ## Test status
 
 - Live LLM verification (Phase 11B, 2026-10-09): real Gemini reasoning + vision HTTP 200 via `manage.py llm_smoke`; end-to-end `analyze()` with real MT5 data → deterministic SELL retained over a bullish LLM reading (disagreement recorded, `resolved=True`); transient Google 503s surfaced loudly in `errors`, never mocked.
 
-- `uv run pytest` → **303 passed, 0 failed** (2026-10-10, Phase 11D (17 new tests); 286 at 11C end; hermetic mock-only)
+- `uv run pytest` → **361 passed, 0 failed, 0 skipped** (2026-10-14, Phase 11E; 303 at 11D; hermetic mock-only)
 - `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated; 11C repaired two out-of-order fixture generators, no assertions changed)
-- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-10)
-- Frontend `npm test` (vitest) → **92 passed, 0 failed**, 10 files (2026-10-10)
-- Frontend `tsc --noEmit` → 0 errors; `next build` → clean, all 11 routes compiled + prerendered (2026-10-10)
+- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-14)
+- Frontend `npm test` (vitest) → **111 passed, 0 failed**, 11 files (2026-10-14, Phase 11E; 92/10 at 11D)
+- Frontend `tsc --noEmit` → 0 errors; `next build` → clean, all 11 routes compiled + prerendered (2026-10-14, Phase 11E)
 - Live smoke test: `GET /api/health/` → `200 OK` on runserver (2026-10-08)
 - Live MT5 timestamp check (11A.5): auto-measured server offset +3.0002 h; candles normalized
   to UTC in the past; zero future timestamps (2026-10-09, MetaQuotes-Demo, local machine)
 
 ## Next phase
 
-- **Phase 11D - professional trading dashboard: COMPLETED 2026-10-10**
-  (`docs/PHASE_REPORTS/PHASE_11D.md`). Phase 11E and remaining audit remediation
-  (P-01/M-09 detectors, M-10..M-16, H-10 docs pass, L-01/L-03..L-07):
+- **Phase 11E - advanced ICT/SMC intelligence + LangGraph: IMPLEMENTED 2026-10-14**
+  (`docs/PHASE_REPORTS/PHASE_11E.md`), **awaiting owner approval**. Remaining audit
+  remediation (M-10..M-16, H-10 docs pass, L-01/L-03..L-07) and Phase 11F (WS-E/WS-F):
   **NOT started - explicit owner approval required. Approval is never implied.**
 
 ## Blockers

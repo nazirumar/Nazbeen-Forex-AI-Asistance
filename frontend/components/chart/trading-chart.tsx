@@ -8,6 +8,10 @@
  * - FVG + order-block zones drawn by `ZonesPrimitive` (timestamp/price aligned);
  * - liquidity levels and validated entry/SL/TP as price lines.
  *
+ * Phase 11E adds: sweep / displacement markers, clustered support-resistance
+ * and premium-discount midpoint lines, and the primary setup's entry/SL/TP
+ * (drawn only for a complete setup — see `lib/chart-data.ts`).
+ *
  * The component never synthesizes bars: with no data it renders nothing and
  * the parent page shows its empty state.
  */
@@ -28,15 +32,20 @@ import {
   type Time,
 } from "lightweight-charts";
 import {
+  buildDisplacementMarkers,
   buildLiquidityLines,
   buildMarkers,
+  buildPremiumDiscountLine,
+  buildSetupLevels,
+  buildSupportResistanceLines,
+  buildSweepMarkers,
   buildZones,
   planLevels,
   toChartCandles,
   type ChartZone,
   type LevelLine,
 } from "@/lib/chart-data";
-import type { CandlePoint, StructureEvent, TradePlan } from "@/lib/types";
+import type { CandlePoint, SetupResult, StructureEvent, TradePlan } from "@/lib/types";
 import { ZonesPrimitive } from "./zone-primitive";
 
 export interface TradingChartProps {
@@ -46,6 +55,12 @@ export interface TradingChartProps {
   orderBlocks?: StructureEvent[];
   liquidity?: StructureEvent[];
   plan?: TradePlan | null;
+  /** Phase 11E detector overlays. */
+  sweeps?: StructureEvent[];
+  displacement?: StructureEvent[];
+  supportResistance?: StructureEvent[];
+  premiumDiscount?: StructureEvent[];
+  setup?: SetupResult | null;
 }
 
 const UP = "#26a69a";
@@ -59,6 +74,11 @@ export function TradingChart({
   orderBlocks = [],
   liquidity = [],
   plan = null,
+  sweeps = [],
+  displacement = [],
+  supportResistance = [],
+  premiumDiscount = [],
+  setup = null,
 }: TradingChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -137,12 +157,19 @@ export function TradingChart({
     if (!series || !markers) return;
     const data = toChartCandles(candles);
     series.setData(data);
-    markers.setMarkers(buildMarkers(events) as SeriesMarker<Time>[]);
+    // Structure breaks plus Phase 11E sweep/displacement events, merged and
+    // re-sorted chronologically (the library rejects unordered markers).
+    const allMarkers = [
+      ...buildMarkers(events),
+      ...buildSweepMarkers(sweeps),
+      ...buildDisplacementMarkers(displacement),
+    ].sort((a, b) => a.time - b.time);
+    markers.setMarkers(allMarkers as SeriesMarker<Time>[]);
     if (data.length > 0 && !fittedRef.current) {
       chartRef.current?.timeScale().fitContent();
       fittedRef.current = true;
     }
-  }, [candles, events]);
+  }, [candles, events, sweeps, displacement]);
 
   // Zones (FVG / order blocks) redraw through the primitive.
   useEffect(() => {
@@ -153,7 +180,7 @@ export function TradingChart({
     primitive.setZones(zones);
   }, [candles, fvgs, orderBlocks]);
 
-  // Liquidity levels + validated plan levels as price lines.
+  // Liquidity levels + validated plan/setup levels as price lines.
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
@@ -174,6 +201,12 @@ export function TradingChart({
 
     for (const line of buildLiquidityLines(liquidity)) add(line);
 
+    // Phase 11E: support/resistance, premium/discount midpoint and the primary
+    // setup's entry/SL/TP (complete setups only — see the builders).
+    for (const line of buildSupportResistanceLines(supportResistance)) add(line);
+    for (const line of buildPremiumDiscountLine(premiumDiscount)) add(line);
+    for (const line of buildSetupLevels(setup)) add(line);
+
     const levels = planLevels(plan);
     if (levels.entry !== null) {
       add({ price: levels.entry, title: "Entry", color: LEVEL_COLORS.entry, lineStyle: "solid" });
@@ -184,7 +217,7 @@ export function TradingChart({
     if (levels.tp !== null) {
       add({ price: levels.tp, title: "TP", color: LEVEL_COLORS.tp, lineStyle: "solid" });
     }
-  }, [liquidity, plan]);
+  }, [liquidity, plan, supportResistance, premiumDiscount, setup]);
 
   return <div ref={containerRef} className="h-full min-h-[360px] w-full" data-testid="chart-container" />;
 }

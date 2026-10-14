@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TradingChart } from "@/components/chart/trading-chart";
 import { ZonesPrimitive } from "@/components/chart/zone-primitive";
 import { toUtcSeconds } from "@/lib/chart-data";
-import type { CandlePoint, StructureEvent, TradePlan } from "@/lib/types";
+import type { CandlePoint, SetupResult, StructureEvent, TradePlan } from "@/lib/types";
 import { candlePoint } from "./helpers";
 
 const m = vi.hoisted(() => {
@@ -138,6 +138,60 @@ describe("TradingChart", () => {
     expect(lines[1].price).toBe(1.1002);
     expect(lines[2].price).toBe(1.099);
     expect(lines[3].price).toBe(1.103);
+  });
+
+  it("draws Phase 11E sweep/displacement markers and S/R, premium/discount and setup price lines", () => {
+    const completeSetup: SetupResult = {
+      model: "ict_primary_setup_v1",
+      direction: "bullish",
+      decision: "BUY",
+      complete: true,
+      stale: false,
+      steps: [],
+      blocked_by: [],
+      chain: null,
+      levels: { entry: 1.1005, invalidation: 1.099, target: 1.104 },
+      context: { h1_bias: null, m5_bias: null, m5_blocks: false, h1_conflict: false },
+      as_of: "2026-01-01T05:00:00Z",
+    };
+    render(
+      <TradingChart
+        candles={CANDLES}
+        sweeps={[ev({ type: "SWEEP", direction: "bullish", confirmed_at: "2026-01-01T00:15:00Z" })]}
+        displacement={[ev({ type: "DISPLACEMENT", direction: "bearish", confirmed_at: "2026-01-01T00:30:00Z" })]}
+        supportResistance={[ev({ type: "SUPPORT_RESISTANCE", level: 1.095 })]}
+        premiumDiscount={[ev({ type: "PREMIUM_DISCOUNT", level: 1.1 })]}
+        setup={completeSetup}
+      />,
+    );
+    const markers = m.setMarkers.mock.calls[0][0] as { text: string; time: number }[];
+    expect(markers.map((mk) => mk.text)).toEqual(["SWEEP", "DISP"]);
+    expect(markers[0].time).toBe(toUtcSeconds("2026-01-01T00:15:00Z"));
+    const lines = (m.createPriceLine.mock.calls as unknown[][]).map(
+      (c) => c[0] as { price: number; title: string },
+    );
+    expect(lines.map((l) => l.title)).toEqual(["S/R", "EQ (mid)", "Entry", "SL", "TP"]);
+    expect(lines[2].price).toBe(1.1005);
+    expect(lines[3].price).toBe(1.099);
+    expect(lines[4].price).toBe(1.104);
+  });
+
+  it("draws no setup price lines for an incomplete setup", () => {
+    const incomplete: SetupResult = {
+      model: "ict_primary_setup_v1",
+      direction: "bullish",
+      decision: "WAIT",
+      complete: false,
+      stale: false,
+      steps: [],
+      blocked_by: ["retest_confirmed"],
+      chain: null,
+      levels: { entry: 1.1005, invalidation: 1.099, target: 1.104 },
+      context: { h1_bias: null, m5_bias: null, m5_blocks: false, h1_conflict: false },
+      as_of: "2026-01-01T05:00:00Z",
+    };
+    render(<TradingChart candles={CANDLES} setup={incomplete} />);
+    expect(m.createPriceLine).not.toHaveBeenCalled();
   });
 
   it("removes previous price lines when the plan changes", async () => {

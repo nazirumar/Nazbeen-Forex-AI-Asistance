@@ -305,3 +305,124 @@ def test_missing_primary_candles_is_503(api: APIClient, monkeypatch) -> None:
     )
     resp = api.get(_url() + "?symbol=EURUSD&timeframe=M15&count=10")
     assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Phase 11E additive keys: advanced detectors, alignment and the setup model.
+# These are additive — the 11D contract above is unchanged.
+# ---------------------------------------------------------------------------
+
+_11E_LIST_KEYS = (
+    "sweeps",
+    "displacement",
+    "rejections",
+    "engulfings",
+    "support_resistance",
+    "sr_flips",
+    "premium_discount",
+)
+
+
+@pytest.mark.django_db
+def test_11e_additive_keys_have_shapes(api: APIClient) -> None:
+    resp = api.get(_url() + "?symbol=EURUSD&timeframe=M15&count=100")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    for key in _11E_LIST_KEYS:
+        assert isinstance(body[key], list), key
+
+    # Explicit alignment mirrors the mtf section (real per-timeframe biases and
+    # a real conflict list, unavailable timeframes as null).
+    alignment = body["mtf_alignment"]
+    assert set(alignment["structure"]) == {"H1", "M15", "M5", "M1"}
+    assert isinstance(alignment["conflicts"], list)
+    assert alignment["aligned"] in (True, False, None)
+    assert isinstance(alignment["unavailable"], list)
+
+    # The primary model is always present and always JSON-safe.
+    setup = body["setup"]
+    assert setup["complete"] in (True, False)
+    assert setup["decision"] in ("BUY", "SELL", "WAIT")
+    assert set(setup["levels"]) == {"entry", "invalidation", "target"}
+    assert isinstance(setup["steps"], list) and len(setup["steps"]) == 7
+
+
+@pytest.mark.django_db
+def test_11e_lifecycle_annotations_are_states_not_guesses(api: APIClient, monkeypatch) -> None:
+    from nazbeen_forex_ai.structure import views as st_views
+
+    data = {"M15": _zigzag(), "H1": _zigzag(), "M5": _zigzag(), "M1": _zigzag()}
+    monkeypatch.setattr(st_views, "get_market_data_provider", lambda: _SyntheticProvider(data))
+
+    resp = api.get(_url() + "?symbol=EURUSD&timeframe=M15&count=34")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    assert body["fvgs"], "fixture must contain an FVG"
+    assert body["order_blocks"], "fixture must contain an order block"
+    valid_states = {"open", "retested", "mitigated", "invalidated", "unknown"}
+    for f in body["fvgs"]:
+        assert f["details"]["lifecycle"]["state"] in valid_states
+    for o in body["order_blocks"]:
+        assert o["details"]["lifecycle"]["state"] in {"open", "retested", "invalidated", "unknown"}
+
+
+@pytest.mark.django_db
+def test_11e_zone_levels_are_real_candle_prices(api: APIClient, monkeypatch) -> None:
+    """SR/premium-discount levels must come from real candles, never invented."""
+    from nazbeen_forex_ai.structure import views as st_views
+
+    data = {"M15": _zigzag(), "H1": _zigzag(), "M5": _zigzag(), "M1": _zigzag()}
+    monkeypatch.setattr(st_views, "get_market_data_provider", lambda: _SyntheticProvider(data))
+
+    resp = api.get(_url() + "?symbol=EURUSD&timeframe=M15&count=34")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    all_prices = {
+        round(p, 6)
+        for c in data["M15"]
+        for p in (c["open"], c["high"], c["low"], c["close"])
+    }
+    for level in body["support_resistance"]:
+        assert round(level["level"], 6) in all_prices
+    for pd in body["premium_discount"]:
+        # midpoint is derived from real range extremes (hi/lo), so it is a
+        # genuine function of the data rather than a fabricated constant.
+        assert pd["details"]["range_high"] >= pd["details"]["range_low"]
+        assert pd["level"] == pd["details"]["midpoint"]
+
+
+@pytest.mark.django_db
+def test_11e_mtf_alignment_reflects_real_conflicts(api: APIClient, monkeypatch) -> None:
+    from nazbeen_forex_ai.structure import views as st_views
+
+    data = {"H1": _RISING, "M15": _RISING, "M5": _FALLING, "M1": _FALLING}
+    monkeypatch.setattr(st_views, "get_market_data_provider", lambda: _SyntheticProvider(data))
+
+    resp = api.get(_url() + "?symbol=EURUSD&timeframe=M15&count=10")
+    assert resp.status_code == 200
+    alignment = resp.json()["mtf_alignment"]
+
+    assert alignment["structure"]["M15"] == "BULLISH"
+    assert alignment["structure"]["M5"] == "BEARISH"
+    assert alignment["aligned"] is False
+    assert alignment["dominant"] is None
+    assert any("M15 BULLISH vs M5 BEARISH" == c for c in alignment["conflicts"])
+
+
+@pytest.mark.django_db
+def test_11e_unavailable_timeframe_keeps_alignment_honest(api: APIClient, monkeypatch) -> None:
+    from nazbeen_forex_ai.structure import views as st_views
+
+    data = {"M15": _RISING, "M5": _FALLING, "M1": _FALLING}  # H1 missing
+    monkeypatch.setattr(
+        st_views, "get_market_data_provider", lambda: _SyntheticProvider(data, fail=("H1",))
+    )
+
+    resp = api.get(_url() + "?symbol=EURUSD&timeframe=M15&count=10")
+    assert resp.status_code == 200
+    alignment = resp.json()["mtf_alignment"]
+    assert alignment["structure"]["H1"] is None
+    assert "H1" in alignment["unavailable"]

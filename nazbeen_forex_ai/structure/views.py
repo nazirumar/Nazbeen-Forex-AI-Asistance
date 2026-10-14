@@ -41,13 +41,21 @@ from nazbeen_forex_ai.marketdata.views import (
     _validate_timeframe,
     provider_mode,
 )
-from nazbeen_forex_ai.structure.analysis import mtf_bias
+from nazbeen_forex_ai.structure.analysis import mtf_bias, mtf_structure_alignment
 from nazbeen_forex_ai.structure.bos import detect_bos_choch_mss
-from nazbeen_forex_ai.structure.fvg import detect_fvg
-from nazbeen_forex_ai.structure.liquidity import detect_liquidity
-from nazbeen_forex_ai.structure.orderblocks import detect_orderblocks
+from nazbeen_forex_ai.structure.displacement import detect_displacement
+from nazbeen_forex_ai.structure.fvg import annotate_fvg_lifecycle, detect_fvg
+from nazbeen_forex_ai.structure.liquidity import detect_liquidity, detect_sweeps
+from nazbeen_forex_ai.structure.orderblocks import detect_orderblocks, validate_orderblocks
+from nazbeen_forex_ai.structure.patterns import detect_engulfing, detect_rejection
+from nazbeen_forex_ai.structure.setup import evaluate_primary_setup
 from nazbeen_forex_ai.structure.swings import classify_structure, detect_swings
 from nazbeen_forex_ai.structure.types import StructureEvent, candles_to_df
+from nazbeen_forex_ai.structure.zones import (
+    detect_premium_discount,
+    detect_sr_flips,
+    detect_support_resistance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,16 +87,20 @@ def _fetch_candles(
 
 
 def _serialize_event(event: StructureEvent, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Detector event as JSON, adding the candle time for index-only events.
+    """Detector event as JSON, always carrying the exact candle ``time``.
 
-    Liquidity events carry only a bar index; the timestamp of that exact candle
-    is attached here so the UI can align them — this is a mapping of real data,
-    not an interpolation.
+    Older index-only events (e.g. the legacy equal-high pairs) get the
+    timestamp of that exact candle; events that carry ``confirmed_at`` expose
+    it as ``time`` too, so the UI always has one real candle timestamp to
+    align on — a mapping of real data, never an interpolation.
     """
     data = event.to_dict()
     idx = event.index
-    if not data.get("confirmed_at") and idx is not None and 0 <= idx < len(candles):
-        data["time"] = candles[idx]["time"]
+    if not data.get("time"):
+        if data.get("confirmed_at"):
+            data["time"] = data["confirmed_at"]
+        elif idx is not None and 0 <= idx < len(candles):
+            data["time"] = candles[idx]["time"]
     return data
 
 
@@ -127,10 +139,20 @@ class StructureView(APIView):
                 )
 
             # --- Deterministic detectors on the requested timeframe ---------
+            # Every list below is the detector output verbatim (an empty list
+            # stays empty). FVGs and order blocks additionally carry a
+            # deterministic lifecycle annotation (retest/mitigation/invalid).
             events = detect_bos_choch_mss(primary)
-            fvgs = detect_fvg(primary)
-            order_blocks = detect_orderblocks(primary)
             liquidity = detect_liquidity(primary)
+            sweeps = detect_sweeps(primary, liquidity=liquidity)
+            fvgs = annotate_fvg_lifecycle(primary, detect_fvg(primary))
+            order_blocks = validate_orderblocks(primary, detect_orderblocks(primary))
+            displacement = detect_displacement(primary)
+            rejections = detect_rejection(primary)
+            engulfings = detect_engulfing(primary)
+            support_resistance = detect_support_resistance(primary)
+            sr_flips = detect_sr_flips(primary)
+            premium_discount = detect_premium_discount(primary)
             swings = classify_structure(detect_swings(candles_to_df(primary)))
 
             # --- Multi-timeframe bias (H1/M15/M5/M1 + real conflicts) -------
@@ -150,6 +172,20 @@ class StructureView(APIView):
                 for tf in BIAS_TIMEFRAMES
             }
             mtf["conflicts"] = raw_bias["conflicts"]
+
+            # Explicit structure alignment (MASTER_SPEC §3.C item 19): reuses
+            # the same fetched series; unavailable timeframes stay ``None``.
+            mtf_alignment = mtf_structure_alignment(aux)
+
+            # Primary trading model (MASTER_SPEC §3.D): evaluated on the real
+            # M15/M1/M5/H1 series. Missing data yields an honest, incomplete
+            # setup (``complete: false``) — never an invented one.
+            setup = evaluate_primary_setup(
+                aux["M15"] or [],
+                aux["M1"] or [],
+                aux["M5"] or [],
+                aux["H1"] or [],
+            )
 
             freshness = assess_staleness(
                 primary[-1]["time"],
@@ -184,7 +220,20 @@ class StructureView(APIView):
                 "fvgs": [f.to_dict() for f in fvgs],
                 "order_blocks": [o.to_dict() for o in order_blocks],
                 "liquidity": [self._liq(e, primary) for e in liquidity],
+                "sweeps": [_serialize_event(e, primary) for e in sweeps],
+                "displacement": [_serialize_event(e, primary) for e in displacement],
+                "rejections": [_serialize_event(e, primary) for e in rejections],
+                "engulfings": [_serialize_event(e, primary) for e in engulfings],
+                "support_resistance": [
+                    _serialize_event(e, primary) for e in support_resistance
+                ],
+                "sr_flips": [_serialize_event(e, primary) for e in sr_flips],
+                "premium_discount": [
+                    _serialize_event(e, primary) for e in premium_discount
+                ],
                 "mtf": mtf,
+                "mtf_alignment": mtf_alignment,
+                "setup": setup,
             },
             status=status.HTTP_200_OK,
         )

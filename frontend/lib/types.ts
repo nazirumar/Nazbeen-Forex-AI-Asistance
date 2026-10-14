@@ -112,6 +112,70 @@ export interface MtfView {
   conflicts: string[];
 }
 
+/** Explicit structure alignment block (Phase 11E; `mtf_structure_alignment`). */
+export interface MtfAlignment {
+  structure: { H1: Bias | null; M15: Bias | null; M5: Bias | null; M1: Bias | null };
+  /** `true` all decisive TFs agree, `false` any disagree, `null` no evidence. */
+  aligned: boolean | null;
+  dominant: Bias | null;
+  conflicts: string[];
+  /** Timeframes without data — never reported as NEUTRAL. */
+  unavailable: string[];
+}
+
+export type SetupStepStatus = "satisfied" | "missing" | "invalid" | "unavailable";
+
+/** One checklist item of the primary trading model (`structure/setup.py`). */
+export interface SetupStep {
+  key: string;
+  label: string;
+  status: SetupStepStatus;
+  time: string | null;
+  detail: string;
+}
+
+export interface SetupLevels {
+  entry: number | null;
+  invalidation: number | null;
+  target: number | null;
+}
+
+export interface SetupContext {
+  h1_bias: Bias | null;
+  m5_bias: Bias | null;
+  m5_blocks: boolean;
+  h1_conflict: boolean;
+}
+
+/** The linked real events of a complete chain (never assembled from noise). */
+export interface SetupChain {
+  sweep_index: number;
+  sweep_time: string | null;
+  displacement_index: number;
+  displacement_time: string | null;
+  mss_index: number;
+  mss_time: string | null;
+  fvg_confirmed_index: number;
+  fvg_time: string | null;
+  retest_time: string | null;
+  m1_time: string | null;
+}
+
+/** Primary trading model result (`evaluate_primary_setup`) — the `setup` key. */
+export interface SetupResult {
+  model: string;
+  direction: "bullish" | "bearish" | null;
+  decision: Decision;
+  complete: boolean;
+  stale: boolean;
+  steps: SetupStep[];
+  blocked_by: string[];
+  chain: SetupChain | null;
+  levels: SetupLevels;
+  context: SetupContext;
+  as_of: string | null;
+}
+
 export interface StructureResponse extends Freshness {
   symbol: string;
   timeframe: string;
@@ -123,6 +187,16 @@ export interface StructureResponse extends Freshness {
   order_blocks: StructureEvent[];
   liquidity: StructureEvent[];
   mtf: MtfView;
+  /* --- Phase 11E additive detector outputs (empty arrays stay empty) --- */
+  sweeps: StructureEvent[];
+  displacement: StructureEvent[];
+  rejections: StructureEvent[];
+  engulfings: StructureEvent[];
+  support_resistance: StructureEvent[];
+  sr_flips: StructureEvent[];
+  premium_discount: StructureEvent[];
+  mtf_alignment: MtfAlignment;
+  setup: SetupResult;
 }
 
 /* ----------------------------------------------------------------- risk --- */

@@ -89,3 +89,89 @@ def detect_orderblocks(
             )
         )
     return events
+
+
+def validate_orderblocks(
+    candles: list[Any], order_blocks: list[StructureEvent]
+) -> list[StructureEvent]:
+    """Order-block validation: retest (mitigation) and invalidation lifecycle.
+
+    Deterministic rules evaluated only on bars **after** the OB's confirming
+    displacement bar (no look-ahead; first qualifying bar wins, so the output
+    is stable when the series grows):
+
+    For an OB zone ``[z_low, z_high] = [levels[0], levels[1]]``:
+
+    - **retest** (the classic "return to the order block"): first later bar
+      whose range overlaps the zone (``low < z_high and high > z_low``).
+      ``touches`` counts all such bars after confirmation.
+    - **invalidation**: first later bar whose **close** finishes beyond the
+      zone against the OB's direction (bullish OB: ``close < z_low``;
+      bearish OB: ``close > z_high``) — that OB is dead and must never
+      support a setup.
+
+    ``details["lifecycle"].state`` is monotone: ``open`` → ``retested`` →
+    ``invalidated``. An OB with no later bars is ``open`` (unknown, not
+    "valid forever"). Re-validating twice returns the same values.
+    """
+    df = candles_to_df(candles)
+    out: list[StructureEvent] = []
+    for ev in order_blocks:
+        details = dict(ev.details or {})
+        conf = details.get("displacement_index")
+        levels = ev.levels or []
+        lifecycle: dict[str, Any]
+        if conf is None or len(levels) < 2:
+            lifecycle = {"state": "unknown", "reason": "missing displacement index"}
+        else:
+            z_low, z_high = float(levels[0]), float(levels[1])
+            bullish = ev.direction == "bullish"
+            retest: tuple[int, Any] | None = None
+            invalidated: tuple[int, Any] | None = None
+            touches = 0
+            for j in range(int(conf) + 1, len(df)):
+                hi = float(df["high"].iloc[j])
+                lo = float(df["low"].iloc[j])
+                cl = float(df["close"].iloc[j])
+                if lo < z_high and hi > z_low:
+                    touches += 1
+                    if retest is None:
+                        retest = (
+                            int(j),
+                            pd.Timestamp(df["time"].iloc[j]).to_pydatetime(),
+                        )
+                if ((cl < z_low) if bullish else (cl > z_high)) and invalidated is None:
+                    invalidated = (
+                        int(j),
+                        pd.Timestamp(df["time"].iloc[j]).to_pydatetime(),
+                    )
+                    break
+            if invalidated:
+                state = "invalidated"
+            elif retest:
+                state = "retested"
+            else:
+                state = "open"
+            lifecycle = {"state": state, "touches": touches}
+            if retest:
+                lifecycle["retest_index"] = retest[0]
+                lifecycle["retest_time"] = retest[1].isoformat().replace("+00:00", "Z")
+            if invalidated:
+                lifecycle["invalidated_index"] = invalidated[0]
+                lifecycle["invalidated_time"] = invalidated[1].isoformat().replace("+00:00", "Z")
+        details["lifecycle"] = lifecycle
+        out.append(
+            StructureEvent(
+                type=ev.type,
+                direction=ev.direction,
+                index=ev.index,
+                start_time=ev.start_time,
+                end_time=ev.end_time,
+                formation_time=ev.formation_time,
+                confirmed_at=ev.confirmed_at,
+                level=ev.level,
+                levels=ev.levels,
+                details=details,
+            )
+        )
+    return out

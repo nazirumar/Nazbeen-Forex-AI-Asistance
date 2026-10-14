@@ -90,11 +90,26 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 | `GET` | `/api/mt5/candles/` | OHLCV for `M1/M5/M15/H1` (`?symbol=&timeframe=&count=&start=`). Every response carries `data_source` (`mock`/`mt5`) and UTC `Z` timestamps. Since Phase 11C/11D it also labels freshness: `market_state` (`open`/`closed`), `stale` (bool), `last_bar_age_sec` (`null` when unknown) and `threshold_sec` — the UI never guesses staleness client-side. |
 | `GET` | `/api/mt5/tick/` | Bid/ask/spread (`?symbol=`). Labeled `data_source`. |
 
-### Market structure (Phase 11D — detector output for the chart)
+### Market structure (Phase 11D, extended in 11E — detector output for the chart)
 
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/api/structure/` | Deterministic ICT/SMC output for `?symbol=&timeframe=&count=` (same validation as candles): `swings`, `events` (BOS/CHOCH/MSS), `fvgs`, `order_blocks`, `liquidity`, plus `mtf` (`H1`/`M15`/`M5`/`M1` biases + `conflicts`). Every event carries its own `type`, `direction`, `index`, `level`/`levels`, `details` and **exact candle timestamps** (`formation_time`/`confirmed_at` etc.) so the chart can anchor overlays without inventing structure. A timeframe whose data cannot be fetched yields bias `null` (unavailable) — **never** a fabricated `NEUTRAL`. Same freshness labels as candles (`market_state`, `stale`, `last_bar_age_sec`, `threshold_sec`). Provider failure → `503` with a generic message. |
+
+**Phase 11E additions to `/api/structure/` are purely additive keys** (the 11D contract above is unchanged):
+
+| Key | Contents |
+|---|---|
+| `sweeps` | Liquidity sweeps (`detect_sweeps`) of previously confirmed BSL/SSL/equal pools. |
+| `displacement` | Displacement candles (`detect_displacement`). |
+| `rejections`, `engulfings` | Rejection and engulfing patterns (`detect_rejection`, `detect_engulfing`). |
+| `support_resistance` | Clustered swing S/R levels (`detect_support_resistance`); each item's `level` is a real candle price. |
+| `sr_flips` | Support↔resistance flips (`detect_sr_flips`). |
+| `premium_discount` | At most one item: dealing-range premium/discount state (`details.zone` ∈ `premium`/`discount`/`equilibrium`, `level` = midpoint, `details.range_high`/`range_low`). |
+| `mtf_alignment` | Explicit structure alignment: `structure` (`H1`/`M15`/`M5`/`M1` biases or `null`), `aligned` (`null` when no decisive evidence), `dominant`, `conflicts`, `unavailable`. |
+| `setup` | Primary trading model (MASTER_SPEC §3.D): `model`, `direction`, `decision` (`BUY`/`SELL`/`WAIT`), `complete`, `stale`, the seven `steps` (each `{key,label,status,time,detail}`; status ∈ `satisfied`/`missing`/`invalid`/`unavailable`), `blocked_by`, `chain`, and `levels` (`entry`/`invalidation`/`target`, `null` unless the chain is complete). |
+
+`fvgs` and `order_blocks` items now also carry `details.lifecycle` (`state` ∈ `open`/`retested`/`mitigated`/`invalidated`/`unknown`). All of these are computed by the deterministic engine; an empty list stays empty and is **never** fabricated.
 
 ### Screenshot analysis (Phase 4, history in 11D)
 

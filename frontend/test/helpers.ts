@@ -66,6 +66,9 @@ import type {
   CandlesResponse,
   JournalEntry,
   Mt5Status,
+  MtfAlignment,
+  SetupResult,
+  SetupStep,
   StructureResponse,
   TradePlan,
 } from "@/lib/types";
@@ -130,6 +133,53 @@ export function tradePlanFixture(over: Partial<TradePlan> = {}): TradePlan {
   };
 }
 
+export function mtfAlignmentFixture(over: Partial<MtfAlignment> = {}): MtfAlignment {
+  return {
+    structure: { H1: "BULLISH", M15: "BULLISH", M5: "BEARISH", M1: "NEUTRAL" },
+    aligned: false,
+    dominant: null,
+    conflicts: ["H1 BULLISH vs M5 BEARISH"],
+    unavailable: [],
+    ...over,
+  };
+}
+
+export function setupStepFixture(over: Partial<SetupStep> = {}): SetupStep {
+  return {
+    key: "bias_confirmed",
+    label: "Bias confirmed",
+    status: "missing",
+    time: null,
+    detail: "",
+    ...over,
+  };
+}
+
+export function setupFixture(over: Partial<SetupResult> = {}): SetupResult {
+  return {
+    model: "ict_primary_setup_v1",
+    direction: "bullish",
+    decision: "WAIT",
+    complete: false,
+    stale: false,
+    steps: [
+      setupStepFixture({ key: "bias_confirmed", label: "Bias confirmed", status: "satisfied", time: ISO_A }),
+      setupStepFixture({ key: "liquidity_swept", label: "Liquidity swept", status: "missing", detail: "no sweep of the expected side" }),
+      setupStepFixture({ key: "displacement_confirmed", label: "Displacement confirmed", status: "missing" }),
+      setupStepFixture({ key: "mss_confirmed", label: "MSS confirmed", status: "missing" }),
+      setupStepFixture({ key: "fvg_identified", label: "FVG identified", status: "missing" }),
+      setupStepFixture({ key: "retest_confirmed", label: "Retest confirmed", status: "missing" }),
+      setupStepFixture({ key: "m1_confirmed", label: "M1 entry confirmed", status: "unavailable", detail: "M1 data unavailable" }),
+    ],
+    blocked_by: ["liquidity_swept", "displacement_confirmed", "mss_confirmed", "fvg_identified", "retest_confirmed", "m1_confirmed"],
+    chain: null,
+    levels: { entry: null, invalidation: null, target: null },
+    context: { h1_bias: null, m5_bias: null, m5_blocks: false, h1_conflict: false },
+    as_of: "2026-01-01T05:00:00Z",
+    ...over,
+  };
+}
+
 export function structureFixture(over: Partial<StructureResponse> = {}): StructureResponse {
   const mtf = { H1: "BULLISH", M15: "BULLISH", M5: "BEARISH", M1: "NEUTRAL", conflicts: ["H1 BULLISH vs M5 BEARISH"] };
   return {
@@ -147,6 +197,15 @@ export function structureFixture(over: Partial<StructureResponse> = {}): Structu
     order_blocks: [],
     liquidity: [],
     mtf: mtf as unknown as StructureResponse["mtf"],
+    sweeps: [],
+    displacement: [],
+    rejections: [],
+    engulfings: [],
+    support_resistance: [],
+    sr_flips: [],
+    premium_discount: [],
+    mtf_alignment: mtfAlignmentFixture(),
+    setup: setupFixture(),
     ...over,
   };
 }

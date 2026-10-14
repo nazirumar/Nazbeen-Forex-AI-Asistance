@@ -17,6 +17,7 @@
 
 import type {
   CandlePoint,
+  SetupResult,
   StructureEvent,
 } from "./types";
 import type { Time, UTCTimestamp } from "lightweight-charts";
@@ -221,6 +222,104 @@ export function planLevels(
   const num = (v: number | null | undefined): number | null =>
     typeof v === "number" && Number.isFinite(v) ? v : null;
   return { entry: num(first), sl: num(plan.sl), tp: num(plan.tp) };
+}
+
+/* --------------------------------------------------- Phase 11E overlays --- */
+
+const SETUP_ENTRY_COLOR = "#22d3ee";
+const SETUP_SL_COLOR = "#ef5350";
+const SETUP_TP_COLOR = "#26a69a";
+const SR_COLOR = "#38bdf8";
+const PREMIUM_DISCOUNT_COLOR = "#a78bfa";
+
+/**
+ * Shared builder for directional detector markers (sweeps, displacement).
+ *
+ * The anchor is the event's confirmation bar (`confirmed_at`), falling back to
+ * the span end and finally the API-attached candle `time`; anything without a
+ * parseable anchor or an explicit direction is dropped rather than guessed.
+ */
+function buildDirectionalMarkers(events: StructureEvent[], text: string): ChartMarker[] {
+  const markers: ChartMarker[] = [];
+  for (const e of events) {
+    if (e.direction !== "bullish" && e.direction !== "bearish") continue;
+    const anchor = toUtcSeconds(e.confirmed_at ?? e.end_time ?? e.time);
+    if (anchor === null) continue;
+    const bullish = e.direction === "bullish";
+    markers.push({
+      time: anchor as UTCTimestamp,
+      position: bullish ? "belowBar" : "aboveBar",
+      shape: bullish ? "arrowUp" : "arrowDown",
+      color: bullish ? BULL_COLOR : BEAR_COLOR,
+      text,
+    });
+  }
+  return markers.sort((a, b) => a.time - b.time);
+}
+
+/** Liquidity sweeps → chart markers anchored to the confirming candle. */
+export function buildSweepMarkers(sweeps: StructureEvent[]): ChartMarker[] {
+  return buildDirectionalMarkers(sweeps, "SWEEP");
+}
+
+/** Displacement candles → chart markers anchored to the confirming candle. */
+export function buildDisplacementMarkers(displacement: StructureEvent[]): ChartMarker[] {
+  return buildDirectionalMarkers(displacement, "DISP");
+}
+
+/**
+ * Primary-setup levels → chart lines. Only emitted for a **complete** setup and
+ * only when the backend actually produced a finite number — a missing entry /
+ * invalidation / target is omitted, never invented.
+ */
+export function buildSetupLevels(setup: SetupResult | null): LevelLine[] {
+  if (!setup || !setup.complete) return [];
+  const out: LevelLine[] = [];
+  const levels = setup.levels ?? { entry: null, invalidation: null, target: null };
+  const push = (value: number | null | undefined, title: string, color: string) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return;
+    out.push({ price: value, title, color, lineStyle: "dashed" });
+  };
+  push(levels.entry, "Entry", SETUP_ENTRY_COLOR);
+  push(levels.invalidation, "SL", SETUP_SL_COLOR);
+  push(levels.target, "TP", SETUP_TP_COLOR);
+  return out;
+}
+
+/** Premium/discount dealing-range midpoint → a single dashed "EQ (mid)" line. */
+export function buildPremiumDiscountLine(premiumDiscount: StructureEvent[]): LevelLine[] {
+  const out: LevelLine[] = [];
+  for (const e of premiumDiscount) {
+    if (typeof e.level !== "number" || !Number.isFinite(e.level)) continue;
+    out.push({
+      price: e.level,
+      title: "EQ (mid)",
+      color: PREMIUM_DISCOUNT_COLOR,
+      lineStyle: "dashed",
+    });
+  }
+  return out;
+}
+
+/** Clustered support/resistance levels → dashed "S/R" lines (finite only). */
+export function buildSupportResistanceLines(supportResistance: StructureEvent[]): LevelLine[] {
+  const out: LevelLine[] = [];
+  for (const e of supportResistance) {
+    if (typeof e.level !== "number" || !Number.isFinite(e.level)) continue;
+    out.push({ price: e.level, title: "S/R", color: SR_COLOR, lineStyle: "dashed" });
+  }
+  return out;
+}
+
+/**
+ * Primary-setup checklist rows. Returns the backend's `steps` verbatim when a
+ * setup is present, otherwise `[]` — steps are never invented.
+ */
+export function deriveSetupChecklist(
+  setup: SetupResult | null,
+): Array<{ key: string; label: string; status: string; detail: string; time: string | null }> {
+  if (!setup || !Array.isArray(setup.steps) || setup.steps.length === 0) return [];
+  return setup.steps;
 }
 
 /** Time type re-export so consumers don't import from the chart library. */

@@ -41,7 +41,11 @@ from nazbeen_forex_ai.marketdata.factory import get_market_data_provider
 from nazbeen_forex_ai.marketdata.freshness import assess_staleness, market_state
 from nazbeen_forex_ai.structure.swings import detect_swings, classify_structure
 from nazbeen_forex_ai.structure.fvg import detect_fvg
-from nazbeen_forex_ai.structure.analysis import mtf_bias, evaluate_scenario
+from nazbeen_forex_ai.structure.analysis import (
+    evaluate_scenario,
+    mtf_bias,
+    mtf_structure_alignment,
+)
 from nazbeen_forex_ai.structure.types import candles_to_df
 
 # Canonical higher/lower timeframes analyzed alongside the requested one (H-05).
@@ -336,31 +340,44 @@ class ScreenshotAnalysisService:
             }
         )
 
-    # -- main entry point ----------------------------------------------------
-    def analyze(
-        self, image_file=None, user_hints: Dict[str, Any] | None = None, **kwargs
-    ) -> ScreenshotAnalysisOutput:
-        hints = user_hints or {}
+    # -- LangGraph node methods (Phase 11E, WP4) -----------------------------
+    # Each node receives the graph state and returns a partial state update.
+    # The pipeline logic deliberately lives here (not in graph.py) so the
+    # existing monkeypatch targets keep working: ``services.get_llm_provider``
+    # is looked up as a module global and market data is fetched via ``self``.
+
+    def node_inspect_screenshot(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        hints = state.get("user_hints") or {}
         raw_symbol, raw_timeframe = self.extract_symbol_timeframe({}, hints)
         # Fabrication guard (audit H-04): never invent the chart identity.
-        # Missing symbol/timeframe means unknown → no market-data fetch and the
-        # decision stays WAIT. No EURUSD/M15 defaults, ever.
         symbol = (raw_symbol or "").strip() or None
         timeframe = (raw_timeframe or "").strip() or None
-        identity_known = bool(symbol and timeframe)
         self._last_symbol = symbol.upper() if symbol else ""
+        image_bytes, image_mime = self._read_image(state.get("image_file"))
+        return {
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "identity_known": bool(symbol and timeframe),
+            "image_bytes": image_bytes,
+            "image_mime": image_mime,
+            "errors": [],
+            "uncertainty": [],
+            "model_labels": {},
+            "evidence": [],
+            "disagreements": [],
+        }
 
-        image_bytes, image_mime = self._read_image(image_file)
-
-        md: Dict[str, Any] = {}
-        aux_candles: Dict[str, List[Dict[str, Any]]] = {}
+    def node_retrieve_market_data(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        symbol = state.get("symbol")
+        timeframe = state.get("timeframe")
         now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        if identity_known:
+        aux_candles: Dict[str, List[Dict[str, Any]]] = {}
+        if state.get("identity_known"):
             try:
                 md = self.retrieve_market_data(symbol, timeframe, count=100)
             except Exception as e:
                 md = {
-                    "symbol": symbol.upper(),
+                    "symbol": symbol.upper() if symbol else symbol,
                     "timeframe": timeframe,
                     "candles": [],
                     "source": "unknown",
@@ -383,8 +400,10 @@ class ScreenshotAnalysisService:
                 "last_bar_age_sec": None,
                 "market_state": market_state(),
             }
+        return {"md": md, "aux_candles": aux_candles}
 
-        det_signals = self.build_deterministic_signals(md, aux_candles)
+    def node_validate_market_data(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        md = state.get("md") or {}
         # Synchronization check (audit H-04): only fresh, real MT5 data counts
         # as synchronized. Mock data is simulated — it can never authorize a
         # BUY/SELL decision or price levels — and stale data is not current
@@ -394,19 +413,9 @@ class ScreenshotAnalysisService:
             and bool(md.get("candles"))
             and not md.get("stale", False)
         )
-        det_decision = det_signals.get("scenario_decision") or "WAIT"
-        det_bias = det_signals.get("bias_m15")
-        prompt = self.build_analysis_prompt(symbol, timeframe, md, det_signals)
-
-        # -- vision role ------------------------------------------------------
-        vision: Optional[LLMChartAssessment] = None
-        reasoning: Optional[LLMReasoningOutput] = None
-        errors: List[str] = []
-        uncertainty: List[str] = []
-        model_labels: Dict[str, str] = {}
-
+        uncertainty = list(state.get("uncertainty") or [])
         # Honest labeling of data-quality limits (audits H-04/H-09).
-        if not identity_known:
+        if not state.get("identity_known"):
             uncertainty.append(
                 "Symbol/timeframe not provided; chart identity unknown — no market "
                 "data was fetched and the decision stays WAIT."
@@ -426,10 +435,48 @@ class ScreenshotAnalysisService:
                 "Market session closed at analysis time; prices are from the "
                 "previous session."
             )
+        return {"data_synchronized": data_synchronized, "uncertainty": uncertainty}
 
+    def node_detect_structure(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        det_signals = self.build_deterministic_signals(
+            state.get("md") or {}, state.get("aux_candles") or {}
+        )
+        return {"det_signals": det_signals}
+
+    def node_multi_timeframe_bias(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        md = state.get("md") or {}
+        aux_candles = state.get("aux_candles") or {}
+        det_signals = dict(state.get("det_signals") or {})
+        primary_tf = (md.get("timeframe") or "M15").upper()
+        by_tf: Dict[str, List[Dict[str, Any]]] = {}
+        for tf in CANONICAL_TIMEFRAMES:
+            by_tf[tf] = md.get("candles") if tf == primary_tf else (aux_candles.get(tf) or [])
+        det_signals["mtf_alignment"] = mtf_structure_alignment(by_tf)
+        return {
+            "det_signals": det_signals,
+            "det_decision": det_signals.get("scenario_decision") or "WAIT",
+            "det_bias": det_signals.get("bias_m15"),
+        }
+
+    def node_reconcile_evidence(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        md = state.get("md") or {}
+        det_signals = state.get("det_signals") or {}
+        prompt = self.build_analysis_prompt(
+            state.get("symbol"), state.get("timeframe"), md, det_signals
+        )
+
+        errors = list(state.get("errors") or [])
+        uncertainty = list(state.get("uncertainty") or [])
+        model_labels = dict(state.get("model_labels") or {})
+        vision: Optional[LLMChartAssessment] = None
+        reasoning: Optional[LLMReasoningOutput] = None
+
+        # -- vision role ------------------------------------------------------
         try:
             vision_llm = get_llm_provider("vision")
-            vision = vision_llm.inspect_chart(prompt, image_bytes, image_mime)
+            vision = vision_llm.inspect_chart(
+                prompt, state.get("image_bytes"), state.get("image_mime")
+            )
             # Label only after a successful call: `model` must never credit a
             # provider whose call failed (failures are named in `errors`).
             model_labels["vision"] = f"{vision_llm.provider_name}/{vision_llm.model}"
@@ -449,14 +496,9 @@ class ScreenshotAnalysisService:
             errors.append(f"reasoning provider failed: {e}")
             uncertainty.append("Reasoning LLM unavailable; explanation skipped.")
 
-        # -- deterministic authority (audit H-05) -----------------------------
-        decision, authority_notes = apply_deterministic_authority(
-            det_decision, vision, data_synchronized, bool(md.get("candles"))
-        )
-        uncertainty.extend(authority_notes)
-
         # -- evidence: deterministic first, LLM claims tagged "ai" -------------
         evidence: List[EvidenceItem] = []
+        timeframe = state.get("timeframe") or md.get("timeframe")
         if det_signals:
             evidence.append(
                 EvidenceItem(
@@ -481,7 +523,7 @@ class ScreenshotAnalysisService:
                 EvidenceItem(
                     type="deterministic_fvg",
                     description=(
-                        f"Fair value gaps detected on {timeframe or md.get('timeframe')}: "
+                        f"Fair value gaps detected on {timeframe}: "
                         f"{det_signals.get('fvg_count')}"
                     ),
                     source="deterministic",
@@ -523,10 +565,136 @@ class ScreenshotAnalysisService:
 
         # -- disagreements ----------------------------------------------------
         ai_claim = {"data_synchronized": False}
-        disagreements = self.reconcile({"data_synchronized": data_synchronized}, ai_claim)
-        disagreements.extend(
-            self.direction_disagreements(det_decision, det_bias, vision)
+        disagreements = self.reconcile(
+            {"data_synchronized": state.get("data_synchronized", False)}, ai_claim
         )
+        disagreements.extend(
+            self.direction_disagreements(
+                det_signals.get("scenario_decision") or "WAIT",
+                det_signals.get("bias_m15"),
+                vision,
+            )
+        )
+
+        return {
+            "vision": vision,
+            "reasoning": reasoning,
+            "errors": errors,
+            "uncertainty": uncertainty,
+            "model_labels": model_labels,
+            "evidence": [e.model_dump() for e in evidence],
+            "disagreements": [d.model_dump() for d in disagreements],
+        }
+
+    def _evaluate_primary_model(
+        self, md: Dict[str, Any], aux_candles: Dict[str, List[Dict[str, Any]]]
+    ) -> Optional[Dict[str, Any]]:
+        """Run the chronological primary model on the M15 series (WP3/WP4).
+
+        Returns ``None`` when the primary timeframe is not M15 or the model
+        cannot run — the setup is then simply unavailable, never invented.
+        """
+        try:
+            from nazbeen_forex_ai.structure.setup import evaluate_primary_setup
+
+            primary_tf = (md.get("timeframe") or "").upper()
+            m15 = md.get("candles") if primary_tf == "M15" else (aux_candles.get("M15") or [])
+            if not m15:
+                return None
+            return evaluate_primary_setup(
+                m15,
+                aux_candles.get("M1") or [],
+                aux_candles.get("M5") or [],
+                aux_candles.get("H1") or [],
+            )
+        except Exception:
+            return None
+
+    def node_evaluate_scenario(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        md = state.get("md") or {}
+        det_signals = state.get("det_signals") or {}
+        setup = self._evaluate_primary_model(md, state.get("aux_candles") or {})
+        det_decision = det_signals.get("scenario_decision") or "WAIT"
+        # The primary model is authoritative when it completes on synchronized
+        # data; otherwise the scenario heuristic stands (and authority forces
+        # WAIT for unsynchronized data regardless).
+        if setup and setup.get("complete") and state.get("data_synchronized"):
+            det_decision = setup.get("decision") or det_decision
+        # -- deterministic authority (audit H-05) -----------------------------
+        decision, authority_notes = apply_deterministic_authority(
+            det_decision,
+            state.get("vision"),
+            state.get("data_synchronized", False),
+            bool(md.get("candles")),
+        )
+        uncertainty = list(state.get("uncertainty") or []) + list(authority_notes)
+        return {
+            "setup": setup,
+            "det_decision": det_decision,
+            "decision": decision,
+            "direction": decision_to_direction(decision),
+            "uncertainty": uncertainty,
+        }
+
+    def node_assess_risk(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Trade-plan assessment — only for a synchronized, complete setup.
+
+        Fabrication guard (MASTER_SPEC §3.A): price levels enter the output
+        **only** when the data is real/synchronized, the seven-step chain is
+        complete and the risk service accepts the plan. Otherwise the analysis
+        carries no entry/SL/TP at all.
+        """
+        md = state.get("md") or {}
+        setup = state.get("setup") or {}
+        decision = state.get("decision", "WAIT")
+        risk: Optional[Dict[str, Any]] = None
+        if (
+            state.get("data_synchronized")
+            and setup.get("complete")
+            and decision in ("BUY", "SELL")
+        ):
+            levels = setup.get("levels") or {}
+            entry = levels.get("entry")
+            invalidation = levels.get("invalidation")
+            target = levels.get("target")
+            if all(v is not None for v in (entry, invalidation, target)):
+                try:
+                    from nazbeen_forex_ai.risk.services import create_trade_plan
+
+                    plan = create_trade_plan(
+                        {
+                            "bias": "bullish" if decision == "BUY" else "bearish",
+                            "entry": entry,
+                            "sl": invalidation,
+                            "tp": target,
+                            "symbol": md.get("symbol") or state.get("symbol") or "EURUSD",
+                            "evidence": [],
+                        }
+                    )
+                except Exception:
+                    plan = None
+                if plan and plan.get("decision") in ("BUY", "SELL"):
+                    risk = plan
+        return {"risk": risk}
+
+    def node_validate_output(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        md = state.get("md") or {}
+        det_signals = state.get("det_signals") or {}
+        vision = state.get("vision")
+        reasoning = state.get("reasoning")
+        errors = list(state.get("errors") or [])
+        uncertainty = list(state.get("uncertainty") or [])
+
+        risk = state.get("risk")
+        entry_levels: List[float] = []
+        sl: Optional[float] = None
+        tp: Optional[float] = None
+        risk_reward: Optional[float] = None
+        if risk:
+            entry_levels = risk.get("entry_levels") or []
+            sl = risk.get("sl")
+            tp = risk.get("tp")
+            risk_reward = risk.get("rr")
 
         # -- compose ----------------------------------------------------------
         summary = (
@@ -554,38 +722,34 @@ class ScreenshotAnalysisService:
             "provider_failures": errors,
         }
 
-        # True only when more than one timeframe actually contributed candles —
-        # never claimed by default.
+        aux_candles = state.get("aux_candles") or {}
         mtf_count = (1 if md.get("candles") else 0) + sum(
             1 for v in aux_candles.values() if v
         )
-        uses_mtf_data = mtf_count > 1
 
         combined = {
-            "symbol": symbol,
-            "timeframe": timeframe,
+            "symbol": state.get("symbol"),
+            "timeframe": state.get("timeframe"),
             "summary": summary,
-            "decision": decision,
-            "direction": decision_to_direction(decision),
-            # Deterministic engine exposes no price levels; LLM candidates stay
-            # in `evidence` as unverified observations (MASTER_SPEC §3.A).
-            "entry_levels": [],
-            "sl": None,
-            "tp": None,
-            "risk_reward": None,
-            "evidence": [e.model_dump() for e in evidence],
-            "disagreements": [d.model_dump() for d in disagreements],
+            "decision": state.get("decision", "WAIT"),
+            "direction": state.get("direction", "neutral"),
+            "entry_levels": entry_levels,
+            "sl": sl,
+            "tp": tp,
+            "risk_reward": risk_reward,
+            "evidence": state.get("evidence", []),
+            "disagreements": state.get("disagreements", []),
             "mtf_conflicts": det_signals.get("mtf_conflicts", []),
             "uncertainty": uncertainty,
             "analysis_timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "uses_mtf_data": uses_mtf_data,
-            "data_synchronized": data_synchronized,
+            "uses_mtf_data": mtf_count > 1,
+            "data_synchronized": state.get("data_synchronized", False),
             "deterministic_signals": det_signals,
             "ai_explanation": ai_explanation,
             "raw_ai_response": raw_ai,
             "model": (
-                ", ".join(f"{k}={v}" for k, v in model_labels.items())
-                if model_labels
+                ", ".join(f"{k}={v}" for k, v in (state.get("model_labels") or {}).items())
+                if state.get("model_labels")
                 else None
             ),
             "errors": errors,
@@ -594,8 +758,20 @@ class ScreenshotAnalysisService:
         if md.get("error"):
             combined["errors"].append(md["error"])
             combined["uncertainty"].append("Market data retrieval issue.")
+        return {"combined": combined}
+
+    def node_persist_analysis(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate the composed output and run an optional injected hook.
+
+        Validation retries once with a forced WAIT on failure (so a malformed
+        LLM-derived field can never produce a false BUY/SELL); if even the
+        forced-WAIT payload fails to validate, the error is raised visibly.
+        The persistence hook is optional — absent means a no-op (the view
+        persists the record).
+        """
+        combined = dict(state.get("combined") or {})
         try:
-            return validate_analysis_output(combined)
+            output = validate_analysis_output(combined)
         except Exception as e:
             combined.setdefault("errors", []).append(f"schema_validation_error: {e}")
             combined["decision"] = "WAIT"
@@ -603,4 +779,31 @@ class ScreenshotAnalysisService:
             combined["entry_levels"] = []
             combined["sl"] = None
             combined["tp"] = None
-            return validate_analysis_output(combined)
+            combined["risk_reward"] = None
+            output = validate_analysis_output(combined)
+        hook = state.get("persist_hook") or getattr(self, "persist_hook", None)
+        if callable(hook):
+            try:
+                hook(output)
+            except Exception:  # pragma: no cover - hook failures never break analysis
+                pass
+        return {"output": output}
+
+    # -- main entry point ----------------------------------------------------
+    def analyze(
+        self, image_file=None, user_hints: Dict[str, Any] | None = None, **kwargs
+    ) -> ScreenshotAnalysisOutput:
+        """Run the LangGraph orchestration pipeline (Phase 11E, WP4).
+
+        Same signature and output contract as before: the compiled graph's
+        nodes are bound methods of this service, so provider/retrieval
+        monkeypatch targets keep working unchanged.
+        """
+        from nazbeen_forex_ai.analysis.graph import run_analysis_graph
+
+        return run_analysis_graph(
+            self,
+            image_file=image_file,
+            user_hints=user_hints or {},
+            persist_hook=kwargs.get("persist_hook"),
+        )

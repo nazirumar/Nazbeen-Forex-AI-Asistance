@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { TradingChart } from "@/components/chart/trading-chart";
+import { SetupChecklist } from "@/components/analysis/setup-checklist";
 import { useMarket } from "@/components/layout/market-context";
 import { RiskPanel } from "@/components/risk/risk-panel";
 import { DataSourceBadge, EmptyState, ErrorState, LoadingState } from "@/components/ui/states";
@@ -103,17 +104,25 @@ export default function ChartPage() {
               orderBlocks={structure?.order_blocks ?? []}
               liquidity={structure?.liquidity ?? []}
               plan={plan}
+              sweeps={structure?.sweeps ?? []}
+              displacement={structure?.displacement ?? []}
+              supportResistance={structure?.support_resistance ?? []}
+              premiumDiscount={structure?.premium_discount ?? []}
+              setup={structure?.setup ?? null}
             />
           )}
         </div>
 
         {structure && (
           <p className="text-xs text-zinc-600">
-            Overlays: BOS/CHOCH/MSS markers anchor to each break&apos;s confirmation bar; FVG and
-            order-block rectangles span the engine&apos;s price band from their formation candle;
-            liquidity levels and validated plan levels are drawn as horizontal lines.
+            Overlays: BOS/CHOCH/MSS markers anchor to each break&apos;s confirmation bar; sweep and
+            displacement markers anchor to the confirming candle; FVG and order-block rectangles span
+            the engine&apos;s price band from their formation candle; liquidity, support/resistance,
+            premium/discount midpoint and validated setup/plan levels are drawn as horizontal lines.
           </p>
         )}
+
+        <SetupChecklist setup={structure?.setup ?? null} />
       </div>
 
       <aside className="w-full shrink-0 xl:w-96">

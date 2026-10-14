@@ -8,14 +8,20 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  buildDisplacementMarkers,
   buildLiquidityLines,
   buildMarkers,
+  buildPremiumDiscountLine,
+  buildSetupLevels,
+  buildSupportResistanceLines,
+  buildSweepMarkers,
   buildZones,
+  deriveSetupChecklist,
   planLevels,
   toChartCandles,
   toUtcSeconds,
 } from "@/lib/chart-data";
-import type { CandlePoint, StructureEvent } from "@/lib/types";
+import type { CandlePoint, SetupResult, SetupStep, StructureEvent } from "@/lib/types";
 import { candlePoint } from "./helpers";
 
 function event(partial: Partial<StructureEvent>): StructureEvent {
@@ -194,5 +200,128 @@ describe("planLevels", () => {
       tp: null,
     });
     expect(planLevels(null)).toEqual({ entry: null, sl: null, tp: null });
+  });
+});
+
+/* ------------------------------------------------ Phase 11E overlays ------ */
+
+function setupResult(over: Partial<SetupResult> = {}): SetupResult {
+  return {
+    model: "ict_primary_setup_v1",
+    direction: "bullish",
+    decision: "BUY",
+    complete: true,
+    stale: false,
+    steps: [],
+    blocked_by: [],
+    chain: null,
+    levels: { entry: 1.1005, invalidation: 1.099, target: 1.104 },
+    context: { h1_bias: null, m5_bias: null, m5_blocks: false, h1_conflict: false },
+    as_of: "2026-01-01T05:00:00Z",
+    ...over,
+  };
+}
+
+describe("buildSweepMarkers / buildDisplacementMarkers", () => {
+  it("anchors sweep markers to confirmed_at and maps direction to position/shape", () => {
+    const markers = buildSweepMarkers([
+      event({ type: "SWEEP", direction: "bullish", confirmed_at: "2026-01-01T00:45:00Z" }),
+      event({ type: "SWEEP", direction: "bearish", confirmed_at: "2026-01-01T01:00:00Z" }),
+    ]);
+    expect(markers).toHaveLength(2);
+    expect(markers[0].time).toBe(toUtcSeconds("2026-01-01T00:45:00Z"));
+    expect(markers[0].text).toBe("SWEEP");
+    expect(markers[0].position).toBe("belowBar");
+    expect(markers[0].shape).toBe("arrowUp");
+    expect(markers[1].position).toBe("aboveBar");
+    expect(markers[1].shape).toBe("arrowDown");
+  });
+
+  it("falls back to end_time then time and drops unparseable/neutral entries", () => {
+    const out = buildSweepMarkers([
+      event({ direction: "bullish", confirmed_at: undefined, end_time: "2026-01-01T02:00:00Z" }),
+      event({ direction: "bearish", confirmed_at: undefined, end_time: undefined, time: "2026-01-01T03:00:00Z" }),
+      event({ direction: "bullish", confirmed_at: undefined, end_time: undefined, time: undefined }),
+      event({ direction: "neutral", confirmed_at: "2026-01-01T00:00:00Z" }),
+      event({ direction: null, confirmed_at: "2026-01-01T00:00:00Z" }),
+      event({ direction: "bullish", confirmed_at: "not-a-date", end_time: undefined, time: undefined }),
+    ]);
+    expect(out.map((mk) => mk.time)).toEqual([
+      toUtcSeconds("2026-01-01T02:00:00Z"),
+      toUtcSeconds("2026-01-01T03:00:00Z"),
+    ]);
+  });
+
+  it("sorts chronologically regardless of input order and labels displacement DISP", () => {
+    const markers = buildDisplacementMarkers([
+      event({ direction: "bullish", confirmed_at: "2026-01-01T03:00:00Z" }),
+      event({ direction: "bearish", confirmed_at: "2026-01-01T01:00:00Z" }),
+    ]);
+    expect(markers.map((mk) => mk.text)).toEqual(["DISP", "DISP"]);
+    expect(markers[0].time).toBe(toUtcSeconds("2026-01-01T01:00:00Z"));
+    expect(markers[0].shape).toBe("arrowDown");
+  });
+});
+
+describe("buildSetupLevels", () => {
+  it("returns [] for null or incomplete setups", () => {
+    expect(buildSetupLevels(null)).toEqual([]);
+    expect(buildSetupLevels(setupResult({ complete: false }))).toEqual([]);
+  });
+
+  it("emits Entry/SL/TP with distinct colors for a complete setup", () => {
+    const lines = buildSetupLevels(setupResult());
+    expect(lines.map((l) => l.title)).toEqual(["Entry", "SL", "TP"]);
+    expect(lines.map((l) => l.price)).toEqual([1.1005, 1.099, 1.104]);
+    expect(lines.every((l) => l.lineStyle === "dashed")).toBe(true);
+    expect(new Set(lines.map((l) => l.color)).size).toBe(3);
+  });
+
+  it("drops individual null/non-finite levels rather than inventing them", () => {
+    const lines = buildSetupLevels(
+      setupResult({ levels: { entry: 1.1005, invalidation: null, target: Number.NaN } }),
+    );
+    expect(lines.map((l) => l.title)).toEqual(["Entry"]);
+  });
+});
+
+describe("buildPremiumDiscountLine / buildSupportResistanceLines", () => {
+  it("draws a dashed midpoint line only for finite premium/discount levels", () => {
+    const lines = buildPremiumDiscountLine([
+      event({ type: "PREMIUM_DISCOUNT", level: 1.1, details: { zone: "premium" } }),
+      event({ type: "PREMIUM_DISCOUNT", level: null, details: {} }),
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].title).toBe("EQ (mid)");
+    expect(lines[0].price).toBe(1.1);
+    expect(lines[0].lineStyle).toBe("dashed");
+  });
+
+  it("draws one dashed S/R line per finite level and drops null levels", () => {
+    const lines = buildSupportResistanceLines([
+      event({ type: "SUPPORT_RESISTANCE", level: 1.095 }),
+      event({ type: "SUPPORT_RESISTANCE", level: 1.11 }),
+      event({ type: "SUPPORT_RESISTANCE", level: null }),
+    ]);
+    expect(lines.map((l) => l.title)).toEqual(["S/R", "S/R"]);
+    expect(lines.map((l) => l.price)).toEqual([1.095, 1.11]);
+    expect(lines.every((l) => l.lineStyle === "dashed")).toBe(true);
+  });
+});
+
+describe("deriveSetupChecklist", () => {
+  it("returns the backend steps verbatim and [] when absent", () => {
+    const steps: SetupStep[] = [
+      {
+        key: "bias_confirmed",
+        label: "Bias confirmed",
+        status: "satisfied",
+        time: "2026-01-01T00:15:00Z",
+        detail: "M15 structure bias BULLISH as of the sweep bar",
+      },
+    ];
+    expect(deriveSetupChecklist(setupResult({ steps }))).toEqual(steps);
+    expect(deriveSetupChecklist(setupResult({ steps: [] }))).toEqual([]);
+    expect(deriveSetupChecklist(null)).toEqual([]);
   });
 });

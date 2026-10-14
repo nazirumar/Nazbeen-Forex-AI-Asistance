@@ -171,3 +171,54 @@ of the owner's instruction for this phase, and LangGraph is still not a dependen
   one real call per role. No doc claims live-provider verification.
 - API-key exposure is prevented by construction (header auth, redacted `__repr__`, secret
   stripping in errors) rather than by convention.
+- **Update (2026-10-14, Phase 11E):** decision 4's deferred item is resolved by **ADR-012** —
+  LangGraph orchestration is now implemented and wired as the single analysis pipeline.
+
+---
+
+## ADR-012 — Phase 11E LangGraph orchestration implemented and wired (resolves ADR-011)
+
+**Status:** Accepted
+**Date:** 2026-10-14
+
+### Context
+
+ADR-011 deferred LangGraph and required an explicit owner decision before any phase could
+claim LangGraph orchestration. The Phase 11E brief (MASTER_SPEC §2/§3.E and
+`docs/audits/PHASE_11_PLAN.md` WS-D) authorised resolving it, so this ADR records the
+implement-vs-defer outcome: **implement and wire**.
+
+### Decision
+
+1. **LangGraph is a real runtime dependency and the single analysis pipeline.**
+   `langgraph` (added via `uv add`) drives `ScreenshotAnalysisService.analyze()`, which is now
+   a façade over a compiled `StateGraph`.
+2. **The ten nodes are bound methods of `ScreenshotAnalysisService` (defined in
+   `services.py`).** `analysis/graph.py` only declares the typed `GraphState` and wires the
+   nodes in order: `inspect_screenshot → retrieve_market_data → validate_market_data →
+   detect_structure → multi_timeframe_bias → reconcile_evidence → evaluate_scenario →
+   assess_risk → validate_output → persist_analysis`. Keeping the logic in the service
+   preserves the existing monkeypatch targets (`services.get_llm_provider`,
+   `ScreenshotAnalysisService.retrieve_market_data`) and keeps `analyze()`'s output contract
+   (`ScreenshotAnalysisOutput`) unchanged.
+3. **Deterministic authority is unchanged (audit H-05).** `evaluate_scenario` runs
+   `apply_deterministic_authority`; the LLM can never upgrade WAIT into BUY/SELL.
+   `assess_risk` produces entry/SL/TP **only** for a synchronized, complete seven-step setup
+   that the risk service accepts — otherwise the analysis carries no price levels
+   (MASTER_SPEC §3.A fabrication guard).
+4. **Failures stay loud (MASTER_SPEC §4).** A failed provider is recorded in
+   `errors`/`uncertainty` and the run continues deterministic-only; the mock is never silently
+   substituted. Output validation retries once with a forced WAIT; a second failure raises
+   visibly.
+5. **Persistence stays in the view; the graph exposes an optional `persist_hook`.** Absent
+   hook = no-op, so the existing upload view (which owns `ScreenshotAnalysis` rows and
+   server-side screenshot storage) is unchanged.
+
+### Consequences
+
+- Audit H-03's "LangGraph missing" item is closed with implementation + tests
+  (`analysis/tests/test_graph.py` covers node inventory, wiring, deterministic authority,
+  loud provider failures, validation retry and the persistence hook).
+- The orchestrator is unit-testable with scripted providers; no network or keys are required.
+- Any future node must be added to both `AnalysisGraph.NODE_NAMES` and the service, with a
+  test in `test_graph.py`.

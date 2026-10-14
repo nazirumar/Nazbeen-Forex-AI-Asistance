@@ -48,7 +48,12 @@ def detect_fvg(candles_or_df, threshold_pips: float = 0.5) -> list[StructureEven
                         confirmed_at=t3,
                         level=float(c1["high"]),
                         levels=[float(c1["high"]), float(c3["low"])],
-                        details={"gap": gap, "origin": t2.isoformat()},
+                        details={
+                            "gap": gap,
+                            "origin": t2.isoformat(),
+                            # c3's index: the bar that confirmed the gap.
+                            "confirmed_index": int(i + 2),
+                        },
                     )
                 )
         # bearish FVG: gap down (c1.low above c3.high)
@@ -66,7 +71,117 @@ def detect_fvg(candles_or_df, threshold_pips: float = 0.5) -> list[StructureEven
                         confirmed_at=t3,
                         level=float(c1["low"]),
                         levels=[float(c3["high"]), float(c1["low"])],
-                        details={"gap": gap, "origin": t2.isoformat()},
+                        details={
+                            "gap": gap,
+                            "origin": t2.isoformat(),
+                            "confirmed_index": int(i + 2),
+                        },
                     )
                 )
     return events
+
+
+def annotate_fvg_lifecycle(
+    candles_or_df, fvgs: list[StructureEvent]
+) -> list[StructureEvent]:
+    """Annotate each FVG with its retest / mitigation / invalidation status.
+
+    Definitions (all evaluated on bars strictly *after* the gap's confirmation
+    bar — no look-ahead; the first qualifying bar wins, so results are stable
+    when the series is extended):
+
+    For a **bullish** gap ``[b, t]`` = ``[levels[0], levels[1]]`` (price comes
+    from above and retraces down), and symmetrically for a bearish gap (price
+    comes from below and retraces up):
+
+    - ``retest``: first later bar whose range overlaps the zone
+      (bullish: ``low < t and high > b``; bearish: ``high > b and low < t``).
+    - ``mitigation``: first later bar whose **close** enters the zone
+      (bullish: ``close <= t``; bearish: ``close >= b``) — the imbalance was
+      traded through by real closes, not just a wick.
+    - ``invalidation``: first later bar whose close finishes **beyond the far
+      edge** of the zone (bullish: ``close < b``; bearish: ``close > t``) —
+      the gap failed entirely.
+
+    ``lifecycle.state`` is monotone: ``open`` → ``retested`` → ``mitigated`` →
+    ``invalidated`` (``invalidated`` may also occur directly, e.g. when price
+    jumps the whole zone). Events whose confirmation bar is the last bar are
+    reported as ``open`` — absence of a later bar is *unknown*, not "valid".
+    """
+    df = candles_to_df(candles_or_df) if isinstance(candles_or_df, list) else candles_or_df
+    out: list[StructureEvent] = []
+    for ev in fvgs:
+        details = dict(ev.details or {})
+        conf = details.get("confirmed_index")
+        levels = ev.levels or []
+        if conf is None or len(levels) < 2:
+            details["lifecycle"] = {"state": "unknown", "reason": "missing confirmation index"}
+            out.append(
+                StructureEvent(
+                    type=ev.type,
+                    direction=ev.direction,
+                    index=ev.index,
+                    start_time=ev.start_time,
+                    end_time=ev.end_time,
+                    formation_time=ev.formation_time,
+                    confirmed_at=ev.confirmed_at,
+                    level=ev.level,
+                    levels=ev.levels,
+                    details=details,
+                )
+            )
+            continue
+
+        bottom, top = float(levels[0]), float(levels[1])
+        bullish = ev.direction == "bullish"
+        retest = mitigated = invalidated = None
+        start = int(conf) + 1
+        for j in range(start, len(df)):
+            hi = float(df["high"].iloc[j])
+            lo = float(df["low"].iloc[j])
+            cl = float(df["close"].iloc[j])
+            j_time = pd.Timestamp(df["time"].iloc[j]).to_pydatetime()
+            overlap = (lo < top and hi > bottom) if bullish else (hi > bottom and lo < top)
+            if retest is None and overlap:
+                retest = (int(j), j_time)
+            if mitigated is None and ((cl <= top) if bullish else (cl >= bottom)):
+                mitigated = (int(j), j_time)
+            if invalidated is None and ((cl < bottom) if bullish else (cl > top)):
+                invalidated = (int(j), j_time)
+                # The gap is dead: no later bar can "retest" a dead gap.
+                break
+
+        if invalidated:
+            state = "invalidated"
+        elif mitigated:
+            state = "mitigated"
+        elif retest:
+            state = "retested"
+        else:
+            state = "open"
+        lifecycle: dict[str, Any] = {"state": state}
+        if retest:
+            lifecycle["retest_index"], lifecycle["retest_time"] = retest[0], retest[1].isoformat().replace("+00:00", "Z")
+        if mitigated:
+            lifecycle["mitigated_index"] = mitigated[0]
+            lifecycle["mitigated_time"] = mitigated[1].isoformat().replace("+00:00", "Z")
+        if invalidated:
+            lifecycle["invalidated_index"] = invalidated[0]
+            lifecycle["invalidated_time"] = invalidated[1].isoformat().replace("+00:00", "Z")
+        details["lifecycle"] = lifecycle
+
+        out.append(
+            StructureEvent(
+                type=ev.type,
+                direction=ev.direction,
+                index=ev.index,
+                start_time=ev.start_time,
+                end_time=ev.end_time,
+                formation_time=ev.formation_time,
+                confirmed_at=ev.confirmed_at,
+                level=ev.level,
+                levels=ev.levels,
+                details=details,
+            )
+        )
+    return out

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { MtfPanel } from "@/components/analysis/mtf-panel";
+import { SetupChecklist } from "@/components/analysis/setup-checklist";
 import { useMarket } from "@/components/layout/market-context";
 import { EmptyState, ErrorState, LoadingState, DataSourceBadge } from "@/components/ui/states";
 import type { Mt5Status, StructureResponse } from "@/lib/types";
@@ -132,6 +133,8 @@ export default function OverviewPage() {
       <ConnectionCard status={status} error={statusError} />
 
       <MtfPanel data={structure} loading={structureLoading} error={structureError} onRetry={() => void loadStructure()} />
+
+      <SetupChecklist setup={structure?.setup ?? null} />
 
       {structureLoading ? (
         <LoadingState label="Loading detected structures…" />

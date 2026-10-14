@@ -1,14 +1,15 @@
 ## CI
 
 - Backend: `python manage.py check`, `python manage.py makemigrations --check --dry-run`, `pytest`
-- Frontend: `npm ci`, `npm run typecheck`, `npm run build`, `npm test`
+- Frontend: `npm ci`, `npm run typecheck`, `npm run build` — the Vitest suite is **not**
+  wired into CI yet; run it locally with `npm test` (see the note below).
 
 (see `.github/workflows/ci.yml`)
 
-## Frontend test suite (Phase 11D)
+## Frontend test suite (Phase 11D, extended in 11E)
 
 `frontend/` now has its own unit/integration suite: **Vitest 5 + Testing Library + jsdom**,
-run with `npm test` (`vitest run`). 92 tests across 10 files in `frontend/test/`, covering:
+run with `npm test` (`vitest run`). 111 tests across 11 files in `frontend/test/`, covering:
 
 - `api.test.ts` — token attachment, DRF error extraction (detail/fields/details[]), 401 →
   token cleared + `nazbeen:auth-expired` event (with credential-path exemption), FormData
@@ -36,6 +37,14 @@ run with `npm test` (`vitest run`). 92 tests across 10 files in `frontend/test/`
   + warnings, and an explicit **no-execution-controls** enforcement test.
 - `journal-history.test.tsx` — journal search/save/rows (UTC times, real fields), analysis
   history rows + reopen links, empty/error states.
+- `setup-checklist.test.tsx` **(11E)** — renders the primary-model steps with honest
+  satisfied/missing/invalid/unavailable labels, model + `complete` + `blocked_by`, and the
+  explicit "no setup yet / insufficient data" state; asserts **no execution controls**.
+- 11E additions to `chart-data.test.ts` / `trading-chart.test.tsx` — sweep/displacement
+  markers anchored to real timestamps (fallback `confirmed_at → end_time → time`), S/R and
+  premium/discount midpoint lines, and setup Entry/SL/TP lines emitted **only** for a
+  `complete` setup with finite values (otherwise `[]`); unparseable events are dropped, never
+  guessed.
 
 Notes:
 
@@ -84,3 +93,16 @@ Contract:
 - Output shows provider, model, latency and the redacted model response only.
 
 There is no CI job for the smoke test (it needs real keys); it is a manual, documented step.
+
+## Phase 11E backend tests
+
+| File | Focus |
+|---|---|
+| `structure/tests/test_detectors_11e.py` (17) | displacement, rejection, engulfing, S/R, S/R flips, premium/discount, sweeps, MTF alignment — documented rules, both directions, timestamps on the candle grid, `[]` on insufficient data. |
+| `structure/tests/test_no_lookahead_11e.py` (9) | Generic no-look-ahead / no-repaint suite: growing the series never changes a prior event's formation/confirmation values. |
+| `structure/tests/test_setup_model.py` (15) | `evaluate_primary_setup` chronological 7-step chain, blocked reasons, complete/incomplete, levels only when complete. |
+| `analysis/tests/test_graph.py` (12) | LangGraph: 10-node inventory + wiring, deterministic authority (LLM cannot upgrade WAIT), loud provider failure (never mocked over), validation retry forced to WAIT, persistence hook. |
+| `structure/tests/test_structure_api.py` (+5, 16 total) | Additive `/api/structure/` keys: shapes, lifecycle states, real price provenance, MTF alignment conflicts, honest unavailable timeframe. |
+
+Helpers: `structure/tests/candles.py` (fixture builder) and `structure/tests/golden.py`
+(deterministic golden fixtures). All hermetic — no network, no MT5, no real keys.

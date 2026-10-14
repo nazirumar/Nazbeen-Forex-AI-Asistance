@@ -107,18 +107,27 @@ nazbeen-forex-ai/                  # this repository (standalone; see DECISIONS.
 
 ## 5. AI pipeline (LangGraph)
 
-The AI layer explains deterministic findings; it does not invent market facts. Orchestration graph
-(nodes are services, state is a typed Pydantic state object):
+The AI layer explains deterministic findings; it does not invent market facts. As of **Phase 11E
+(ADR-012)** the pipeline is a real LangGraph `StateGraph` (`langgraph` dependency) with a typed
+`GraphState` (a `TypedDict`). `ScreenshotAnalysisService.analyze()` is a façade that compiles and
+invokes the graph; the ten nodes are bound methods of that service (in `analysis/services.py`),
+and `analysis/graph.py` only declares the state and wires the nodes:
 
 ```
 inspect_screenshot → retrieve_market_data → validate_market_data → detect_structure
-        → multi_timeframe_analysis → reconcile_evidence → generate_scenarios
-        → assess_risk → validate_response (Pydantic) → persist_analysis
+        → multi_timeframe_bias → reconcile_evidence → evaluate_scenario
+        → assess_risk → validate_output (Pydantic) → persist_analysis
 ```
 
+- The deterministic engine is **authoritative** (audit H-05): `evaluate_scenario` applies
+  `apply_deterministic_authority`, so an LLM reading can never upgrade a `WAIT` into `BUY`/`SELL`.
+- `assess_risk` emits entry/SL/TP **only** for a synchronized, complete seven-step setup that the
+  risk service accepts; otherwise the output carries no price levels (fabrication guard).
 - Screenshot bytes, external text and model outputs are treated as **untrusted input**.
 - The final structured response is validated by Pydantic before persistence; invalid output is
-  retried or the run fails visibly.
+  retried once with a forced `WAIT`, then the run fails visibly.
+- A provider failure is recorded in `errors`/`uncertainty` and the run degrades to
+  deterministic-only; the mock provider is never silently substituted for a configured real one.
 - LLM output is text/explanation only. It can never directly execute a trading command.
 
 ## 6. Data model sketch (grows per phase)

@@ -40,3 +40,11 @@ Build secure screenshot upload, multimodal analysis with LangGraph-style orchest
 
 ## 4. Next phase
 Await approval.
+
+---
+
+## Errata addendum (Phase 11F, 2026-10-14)
+
+The title "LangGraph Orchestration" overstated Phase 4: the pipeline was a **linear service**, not
+a LangGraph graph (audit H-03). A real compiled `StateGraph` (10 nodes, `analyze()` façade) landed
+in Phase 11E under ADR-012. This addendum records the correction (audit H-10).

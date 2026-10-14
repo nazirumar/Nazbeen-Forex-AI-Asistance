@@ -52,9 +52,11 @@ class LoginView(APIView):
         user = authenticate(request, username=username, password=password)
         if user is None:
             # Uniform message: never reveal whether the account exists.
+            # 401 (not 400) — bad credentials are an authentication failure
+            # (audit L-07).
             return Response(
                 {"detail": "Invalid credentials."},
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_401_UNAUTHORIZED,
             )
         token, _ = Token.objects.get_or_create(user=user)
         return Response({"token": token.key, "user": UserSerializer(user).data})

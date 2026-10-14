@@ -222,3 +222,50 @@ implement-vs-defer outcome: **implement and wire**.
 - The orchestrator is unit-testable with scripted providers; no network or keys are required.
 - Any future node must be added to both `AnalysisGraph.NODE_NAMES` and the service, with a
   test in `test_graph.py`.
+
+---
+
+## ADR-013 — Phase 11F journal/analytics surface, backtest ownership, and the `?format=` override
+
+**Status:** Accepted
+**Date:** 2026-10-14
+
+### Context
+
+MASTER_SPEC §3.H requires the trading journal to record the full analysis context (screenshot,
+market snapshot, detected structures, model/strategy version, estimated probability, scenario,
+levels, outcome) and to support historical review and performance reports. Audit M-15 found the
+journal stored only a subset with create+search and no performance/export surface. Audit L-07
+found login answered `400` on bad credentials. WS-E also asked for backtest-history surfacing.
+
+### Decision
+
+1. **Journal fields are additive only.** `JournalEntry` gains `screenshot_analysis` (FK →
+   `analysis.ScreenshotAnalysis`, `SET_NULL`), `analysis_timestamp`, `market_snapshot`,
+   `detected_structures`, `model_version`, `strategy_version`, `estimated_probability`. Existing
+   columns and rows are untouched; migration is additive.
+2. **No fabrication in the journal or analytics.** A value that was never recorded stays
+   `null`/`[]`/`{}`; `performance()` returns `null` for any statistic the recorded data cannot
+   support and always reports the `pnl_sample`/`rr_sample` sizes used. `estimated_probability`
+   is only ever the caller-supplied/recorded figure — never invented (consistent with M-08).
+3. **All journal and backtest reads/writes are owner-scoped**, enforced in the service/queryset,
+   not just the view. Another user's entry or analysis id is an opaque `404`/unlinked reference.
+4. **Backtest history is owner-scoped.** `BacktestRun` gains a nullable `user` FK; `GET
+   /api/backtests/` returns only the caller's runs. Runs recorded without an owner are **not**
+   returned, so history is never exposed across accounts.
+5. **`journal/export?format=csv|json` is an application parameter.** DRF reserves `?format=` for
+   content negotiation and 404s on `csv` when only the JSON renderer is configured, so
+   `REST_FRAMEWORK["URL_FORMAT_OVERRIDE"]` is set to `None` globally (no other endpoint used it).
+6. **Login bad credentials answer `401`** (uniform message), not `400` (audit L-07). Logout
+   already revokes the token; password reset is documented out of scope.
+
+### Consequences
+
+- Audit M-15 / P2.5 closed with service + API + tests (`journal/tests/test_journal_11f.py`,
+  `backtesting/tests/test_backtest_history_api.py`).
+- WS-F: `.env.example` is mock-first (M-12), production HSTS defaults on (L-04), redaction covers
+  URL userinfo + structured extras (L-03), README/API.md/ROADMAP corrected (H-10/M-14/M-16).
+- Docker build/run and GitHub-CI execution (M-11/M-13) remain blocked in this environment and are
+  recorded as blocked, never claimed as verified.
+- `URL_FORMAT_OVERRIDE = None` is a deliberate global change; any future endpoint wanting DRF
+  format negotiation must re-enable it explicitly.

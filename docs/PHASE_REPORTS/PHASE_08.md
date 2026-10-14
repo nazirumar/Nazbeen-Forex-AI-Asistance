@@ -22,3 +22,12 @@ Chart is placeholder in UI; overlays contract can follow price/time in future en
 
 ## 5. Next phase
 Await approval.
+
+---
+
+## Errata addendum (Phase 11F, 2026-10-14)
+
+This report claimed "all core workflows accessible" with the chart as a placeholder. **Errata:** no
+chart existed at Phase 8 (audit H-08). A real interactive candlestick chart with deterministic
+ICT/SMC overlays was delivered in Phases 11D/11E. History is not rewritten; this addendum records
+the correction (audit H-10).

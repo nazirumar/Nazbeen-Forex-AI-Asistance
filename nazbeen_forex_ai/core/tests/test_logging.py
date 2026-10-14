@@ -59,3 +59,25 @@ def test_json_formatter_outputs_valid_json_and_redacts() -> None:
     assert payload["logger"] == "test.json"
     assert "abc123secret" not in payload["message"]
     assert payload["time"].endswith("Z")
+
+
+def test_redact_url_userinfo() -> None:
+    """L-03: credentials embedded in a connection URL are masked."""
+    out = redact_text("connecting to postgres://nazbeen:s3cr3t@db:5432/nazbeen ok")
+    assert "s3cr3t" not in out
+    assert REDACTED in out
+
+
+def test_json_formatter_redacts_structured_extras() -> None:
+    """L-03: secrets attached as `extra=` never reach JSON output."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="test.json.extras", level=logging.INFO, pathname=__file__, lineno=3,
+        msg="polling", args=(), exc_info=None,
+    )
+    record.token = "9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"
+    record.payload = {"api_key": "sk-live-abcdef123456", "symbol": "EURUSD"}
+    payload = json.loads(formatter.format(record))
+    assert "9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b" not in json.dumps(payload)
+    assert "sk-live-abcdef123456" not in json.dumps(payload)
+    assert payload["payload"]["symbol"] == "EURUSD"  # non-secrets preserved

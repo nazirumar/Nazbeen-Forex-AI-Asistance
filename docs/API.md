@@ -36,11 +36,11 @@ Application health check. Performs checks for database, cache (Redis), and Celer
 ```
 
 **Response `503 Service Unavailable`** when any critical check fails, with
-`"status": "degraded"` (or `"status": "fail"` for broker-unreachable in strict cases) and the failing check reported as `"fail"`.
+`"status": "degraded"` and the failing check reported as `"fail"`. The handler only ever emits `ok` or `degraded` at the top level — there is no `"fail"` status.
 
 | Field | Type | Description |
 |---|---|---|
-| `status` | string | `ok`, `degraded`, or `fail` |
+| `status` | string | `ok` or `degraded` |
 | `service` | string | Fixed service identifier |
 | `version` | string | Application version from settings |
 | `time` | string | Current UTC time, ISO-8601 (ends with `Z`) |
@@ -55,7 +55,7 @@ All auth endpoints accept JSON; return `401` on missing/invalid tokens.
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/api/auth/register/` | Create account + profile; returns `token` + `user` (no password). Password validation enforced. Throttled (auth scope). |
-| `POST` | `/api/auth/login/` | Validate credentials; returns `token` + `user`. Throttled (auth scope). |
+| `POST` | `/api/auth/login/` | Validate credentials; returns `token` + `user`. Bad credentials → `401` with a uniform `{"detail": "Invalid credentials."}` (never reveals whether the account exists). Throttled (auth scope). |
 | `POST` | `/api/auth/logout/` | Revoke the current token (requires `Authorization: Token …`). Throttled (defaults). |
 | `GET`  | `/api/auth/me/`    | Return current authenticated user + embedded `profile` (`display_timezone`, timestamps UTC). Throttled (defaults). |
 
@@ -76,7 +76,7 @@ Example register response (201):
 
 Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are resilient — if the throttling cache (Redis) is unreachable, auth endpoints still respond (rate limiting degraded). See ADR-008.
 
-## Implemented endpoints (Phases 2–7, 11C–11D additions)
+## Implemented endpoints (Phases 2–7, 11C–11F additions)
 
 > Paths below are live in the repository (verified against `*/urls.py` during the Phase 9
 > documentation audit, 2026-10-09). All require `Authorization: Token <key>` unless noted.
@@ -126,13 +126,34 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 |---|---|---|
 | `POST` | `/api/risk/trade-plan/` | Computes BUY/SELL/WAIT plan with entry/SL/TP, RR, lot size, reasons. **Never places orders.** Invalid inputs → `WAIT`. |
 
-### Journal & mentor (Phase 7 — per-user isolation)
+### Journal, performance & mentor (Phases 7 & 11F — per-user isolation, analysis-only)
+
+The journal records every MASTER_SPEC §3.H field (screenshot link, market snapshot, detected
+structures, model/strategy version, estimated probability when available, scenario, entry /
+invalidation levels, outcome, notes). **Nothing is fabricated**: an unrecorded value is `null`,
+and every performance statistic is `null` when the data to compute it was not recorded. All
+endpoints are scoped to the caller's own rows.
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/journal/entries/` | Create a journal entry. |
-| `GET` | `/api/journal/search/?q=` | Search the caller's own entries (`q` filters note text). Since 11D each row also includes `timeframe`, `scenario_decision`, `rr` and `created_at` (additive fields; older clients unaffected). |
-| `POST` | `/api/mentor/ask/` | Context-aware mentor answer; references only the caller's saved analyses. |
+| `GET` | `/api/journal/entries/` | List/search the caller's entries. Query: `q` (notes text), `symbol`, `outcome`, `limit` (1–200, default 50). Returns `{count, entries:[…]}` with the full spec fields. A non-integer `limit` → `400`. |
+| `POST` | `/api/journal/entries/` | Create an entry. Optional `analysis_session_id` links a stored `ScreenshotAnalysis` and derives symbol/timeframe/market snapshot/structures/model version/analysis timestamp from it. Invalid `outcome`/numeric/JSON fields → `400`. |
+| `GET` | `/api/journal/entries/{uuid}/` | Retrieve one entry (owner-only; others → `404`). |
+| `PATCH`/`PUT` | `/api/journal/entries/{uuid}/` | Partial/full update (owner-only). |
+| `DELETE` | `/api/journal/entries/{uuid}/` | Delete (owner-only); `204` on success, `404` otherwise. |
+| `GET` | `/api/journal/search/?q=` | Backward-compatible alias of `GET /api/journal/entries/`. |
+| `GET` | `/api/journal/performance/` | Honest aggregate over recorded fields only: outcome `counts`, `win_rate`, `average_rr`, `total_pnl`, `expectancy`, `profit_factor`, `max_drawdown`, plus the `pnl_sample`/`rr_sample` sizes used. Each statistic is `null` when not computable. |
+| `GET` | `/api/journal/export/?format=csv\|json` | Export the caller's recorded rows. `json` (default) → `{count, entries}`; `csv` → `text/csv` attachment. Invalid format → `400`. |
+| `POST` | `/api/mentor/ask/` | Context-aware mentor answer; references only the caller's saved analyses. Empty `question` → `400`. |
+
+> Note: `?format=` is an *application* parameter here, not DRF content negotiation — the DRF URL
+> format override is disabled (`URL_FORMAT_OVERRIDE = None`) so `?format=csv` is not rejected.
+
+### Backtest history (Phase 11F — read-only)
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/backtests/` | The caller's recorded `BacktestRun` metrics (newest first, max 100). Runs recorded **without an owner are not returned** — runs never leak across accounts. Engine-computed metrics only; never fabricated (audit CRIT-01). |
 
 ### WebSocket (Phase 10 — read-only operational status)
 
@@ -145,8 +166,8 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 | Endpoint | Purpose |
 |---|---|
 | `GET/PATCH` `/api/auth/me/profile/` | Update user profile/settings (e.g. `display_timezone`) |
-| `POST /api/backtests/`, `GET /api/backtests/{id}/` | Backtest run API (engine exists, no HTTP surface yet) |
-| `GET /api/analytics/performance/` | Aggregated performance reports |
-| Journal export endpoints | CSV/PDF journal reports |
+| Password reset | Not implemented; out of scope for the current phases (audit L-07) |
+| `POST /api/backtests/` | Run/schedule a backtest over HTTP (the engine exists; only read-only history is exposed in 11F) |
+| Backtest equity curve | Per-run trade list / equity series (metrics are summarized today) |
 
 > Each phase updates this file in the same commit as the endpoints it adds.

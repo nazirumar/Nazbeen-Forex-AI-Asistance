@@ -271,6 +271,11 @@ REST_FRAMEWORK = {
     },
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
     "UNAUTHENTICATED_USER": None,
+    # `?format=` is reserved by DRF for content negotiation; with only the JSON
+    # renderer enabled it 404s on e.g. `?format=csv`. Phase 11F's journal export
+    # uses `?format=csv|json` as an *application* parameter, so the DRF override
+    # is disabled globally (no other endpoint relies on it).
+    "URL_FORMAT_OVERRIDE": None,
 }
 
 # --- Logging --------------------------------------------------------------

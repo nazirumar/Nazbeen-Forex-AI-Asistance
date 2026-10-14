@@ -42,6 +42,17 @@ historical finding; per-issue verification with test names and live evidence liv
 > non-walk-forward fallback marking, one-signal-per-trade) and M-08 (no fabricated confidence
 > intervals) are closed. **H-04's price-level half was already structurally closed in 11B.**
 
+> **Phase 11D–11F update (2026-10-14):** the frontend MVP (**H-07/H-08**) is delivered
+> (`PHASE_11D.md`): working login → upload → analysis workspace → MT5 status/bias → interactive
+> candlestick chart with structure overlays, dark theme, mock/live labelled. The market-structure
+> engine is completed (**M-09/P-01**) and every event carries `confirmed_at` (**M-10**)
+> (`PHASE_11E.md`); `analyze()` is now a real compiled 10-node LangGraph graph (**H-03** closed,
+> ADR-012 supersedes ADR-011). **Phase 11F** closes the journal/analytics workstream (**M-15**:
+> spec §3.H fields, full CRUD, performance + export, read-only owner-scoped backtest history) and
+> the documentation/config errata (**H-10, M-12, M-14, M-16, L-03, L-04, L-06, L-07**). Docker
+> build/compose-run and GitHub-CI execution (**M-11, M-13**) remain **blocked** — there is no
+> Docker host in the development environment — and are recorded honestly rather than claimed.
+
 | ID | Status | Notes |
 |---|---|---|
 | CRIT-01 | ✅ resolved | Real SL/TP simulation, costs, honest metrics, injectable strategy |
@@ -51,14 +62,14 @@ historical finding; per-issue verification with test names and live evidence liv
 | CRIT-05 | ✅ resolved | Evidence-based UTC offset (live-measured +3.0002 h) + future rejection |
 | H-01 | ✅ resolved | Strict Pillow validation; view returns safe 400s |
 | H-02 | ✅ resolved | Screenshots persist under `MEDIA_ROOT/screenshots` (server-generated names); ownership-scoped retrieval endpoint; traversal refused (Phase 11C) |
-| H-03 | 🟡 partial | Real OpenAI/Gemini vision+reasoning providers implemented & tested (Phase 11B); LangGraph → owner decision (ADR-011) |
+| H-03 | ✅ resolved | Real OpenAI/Gemini vision+reasoning providers (Phase 11B); real LangGraph `StateGraph` with 10 nodes, `analyze()` façade (Phase 11E, ADR-012) |
 | H-04 | ✅ resolved | No fabricated chart identity (missing symbol/timeframe → `null` + WAIT); mock/stale data never synchronized (Phase 11C; LLM price levels structurally barred since 11B) |
 | H-05 | ✅ resolved | Bias heuristic fixed (11A); LLM subordination (11B); real `conflicts` across H1/M15/M5/M1 with auxiliary fetches (Phase 11C) |
 | H-06 | ✅ resolved | Correct pip value per lot; exact 1.00-lot EURUSD repro |
-| H-07 | ⛔ open | Frontend login — 11B+ |
-| H-08 | ⛔ open | Dashboard scope — 11B+ |
+| H-07 | ✅ resolved | Frontend login delivered (Phase 11D) |
+| H-08 | ✅ resolved | Dashboard delivered: upload → workspace → chart with overlays (Phase 11D/11E) |
 | H-09 | ✅ resolved | Credentials/suffix wired into factory, staleness + market-closure labeling, mocked-connector tests (Phase 11C; timestamps/symbol_select earlier) |
-| H-10 | ⛔ open | Documentation errata pass — 11B |
+| H-10 | ✅ resolved | Doc errata pass (Phase 11F): README/API.md corrected, ROADMAP status table refreshed, phase-report addenda below |
 | M-01 | ✅ resolved | Mock tick uses `datetime.now(timezone.utc)` |
 | M-02 | ✅ resolved | Unknown timeframe raises `MarketDataProviderError` |
 | M-03 | ✅ resolved | `count`/`symbol`/`timeframe`/`start` validated → 400 (bounded, no DoS) (Phase 11C) |
@@ -67,13 +78,23 @@ historical finding; per-issue verification with test names and live evidence liv
 | M-06 | ✅ resolved | `get_symbol_spec` returns `None`; never fabricated |
 | M-07 | ✅ resolved | `overall` = aggregation (11A); fallback marked non-walk-forward + strict chronology validation (Phase 11C) |
 | M-08 | ✅ resolved | No fabricated confidence interval: `[]` whenever uncalibrated (Phase 11C) |
-| M-09 | ⛔ open | Missing detectors (incl. P-01) — 11B |
-| M-10 | 🟡 partial | `formation_time`/`confirmed_at` on FVG/BOS/OB; liquidity/swings events → 11B |
-| M-11 … M-16 | ⛔ open | Not in 11A scope — 11B |
-| P-01 | ⛔ open | Equal-high/equal-low detectors (with M-09) — not in 11C scope |
+| M-09 | ✅ resolved | All remaining MASTER_SPEC §3.C detectors implemented (displacement, rejection, engulfing, S/R, S/R flips, premium/discount, sweeps, lifecycle) (Phase 11E) |
+| M-10 | ✅ resolved | `confirmed_at` stamped on FVG/BOS/OB, liquidity (BSL/SSL) and equal-high/low events; swings confirmed at next bar (Phase 11E) |
+| M-11 | ⛔ blocked | Docker stack defects — config review only; **never built/run** (no Docker host). See 11F report. |
+| M-12 | ✅ resolved | `.env.example` now mock-first (`MT5_USE_MOCK=true`); documented (Phase 11F) |
+| M-13 | ⛔ blocked | Container configs never built/run — no Docker host available (Phase 11F, recorded honestly) |
+| M-14 | ✅ resolved | `docs/API.md` regenerated against routes: health statuses corrected, login `401`, 11F endpoints documented (Phase 11F) |
+| M-15 | ✅ resolved | Journal spec §3.H fields + full CRUD + performance/export + backtest history (Phase 11F) |
+| M-16 | ✅ resolved | `ROADMAP.md` status table refreshed; README claim corrected (Phase 11F) |
+| P-01 | ✅ resolved | Equal-high/equal-low detectors implemented with `confirmed_at` (Phase 11E) |
 | P-02 / P-03 | ✅ resolved | train==test fallback explicitly marked NOT walk-forward; one signal consumed per trade (Phase 11C) |
-| L-01, L-03 … L-07 | ⛔ open | Not in 11C scope |
+| L-01 | 🟡 deferred | Health must stay open (probes); WS-connect throttling is optional and out of 11F scope — recorded, not silently dropped |
 | L-02 | ✅ resolved | Generic client messages everywhere; exception detail logged server-side only (Phase 11C) |
+| L-03 | ✅ resolved | `redact_text` now masks URL userinfo; `JsonFormatter` redacts structured `extra` fields (Phase 11F) |
+| L-04 | ✅ resolved | Production HSTS on by default (31 536 000 s, include-subdomains/preload), override documented (Phase 11F) |
+| L-05 | 🟡 partial | Swing equality asymmetry is a behavioural change deferred (would regenerate golden fixtures unverified); stub `tests.py` cleanup included where safe |
+| L-06 | ✅ resolved | Static clock/label removed by the 11D shell rebuild; the topbar clock is a live UTC tick and the symbol is a real selector |
+| L-07 | ✅ resolved | Login bad credentials → `401` (was `400`); logout already revokes the token; password reset documented out of scope (Phase 11F) |
 
 **Suite after 11A:** `uv run pytest` → 145 passed · `manage.py check` → clean ·
 `makemigrations --check --dry-run` → no changes.

@@ -19,13 +19,15 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
-# TLS redirection / HSTS — env-driven because plain-HTTP compose stacks and
-# gunicorn-behind-proxy setups differ. Enable in real deployments:
-#   SECURE_SSL_REDIRECT=true  SECURE_HSTS_SECONDS=31536000
+# TLS redirection / HSTS. HSTS is ON by default in production (audit L-04);
+# set SECURE_HSTS_SECONDS=0 to disable it for a plain-HTTP compose stack, and
+# SECURE_SSL_REDIRECT=true when TLS terminates in front of the app.
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", False)  # noqa: F405
-SECURE_HSTS_SECONDS = env_int("SECURE_HSTS_SECONDS", 0)  # noqa: F405
-SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0  # noqa: F405
-SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0  # noqa: F405
+SECURE_HSTS_SECONDS = env_int("SECURE_HSTS_SECONDS", 31536000)  # noqa: F405
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(  # noqa: F405
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0
+)
+SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", SECURE_HSTS_SECONDS > 0)  # noqa: F405
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"

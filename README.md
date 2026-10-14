@@ -1,8 +1,10 @@
 # Nazbeen Forex AI Asistance
 
 AI-powered Forex market analysis and decision-support platform. Combines screenshot-based chart
-analysis with live MetaTrader 5 data to produce **evidence-based** trading scenarios (BUY SCENARIO
-/ SELL SCENARIO / WAIT) — analysis-only, no trade execution.
+analysis with market data from MetaTrader 5 — **mock-first by default** (`MT5_USE_MOCK=true`); a
+live terminal is optional and only used when explicitly configured and reachable — to produce
+**evidence-based** trading scenarios (BUY SCENARIO / SELL SCENARIO / WAIT). Analysis-only, no
+trade execution. Mock data is always labeled as mock, never passed off as live.
 
 > Initial market: **EURUSD** · Primary timeframe: **M15** · Entry confirmation: **M1**
 > Methodology: ICT / Smart Money Concepts / price action

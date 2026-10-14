@@ -5,13 +5,14 @@
 
 ## Current phase
 
-**Phase 11E - Advanced ICT/SMC Intelligence and LangGraph** - implemented 2026-10-14 -
-**awaiting owner approval before Phase 11F**
+**Phase 11F - Journal, Analytics & Reporting + Infra Verification & Doc Errata** - implemented
+2026-10-14 - **awaiting owner approval before Phase 11G**
 
-> Phase 11E resolves ADR-011 (LangGraph orchestration implemented and wired - ADR-012).
-> Phase 11D (professional trading dashboard) completed 2026-10-10 - see
-> `docs/PHASE_REPORTS/PHASE_11D.md`. Phase 11C (data integrity remediation) 2026-10-10;
-> Phase 11B (real LLM providers) 2026-10-09.
+> Phase 11F closes WS-E (journal spec §3.H fields, full CRUD, performance/export, read-only
+> owner-scoped backtest history - audit M-15/P2.5) and WS-F (doc/config errata - H-10, M-12,
+> M-14, M-16, L-03, L-04, L-06, L-07). Docker build/run and GitHub-CI execution (M-11, M-13)
+> remain **blocked** (no Docker host here) and are recorded honestly. Phase 11E (advanced
+> ICT/SMC intelligence + LangGraph) completed 2026-10-14 - see `docs/PHASE_REPORTS/PHASE_11E.md`.
 
 ## Completed phases
 
@@ -32,6 +33,7 @@
 | 11C | Remaining Data Integrity and Safety Remediation (WS-B / P1.1-P1.8) | `docs/PHASE_REPORTS/PHASE_11C.md` | 2026-10-10 |
 | 11D | Professional Trading Dashboard (frontend + supporting endpoints) | `docs/PHASE_REPORTS/PHASE_11D.md` | 2026-10-10 |
 | 11E | Advanced ICT/SMC Intelligence and LangGraph (WS-D) | `docs/PHASE_REPORTS/PHASE_11E.md` | 2026-10-14 |
+| 11F | Journal, Analytics & Reporting + Infra Verification & Doc Errata (WS-E/WS-F) | `docs/PHASE_REPORTS/PHASE_11F.md` | 2026-10-14 |
 
 ## Completed features
 
@@ -89,14 +91,18 @@
 - **Phase 11C - remaining data integrity & safety remediation (WS-B / P1.1-P1.8)**: screenshots persisted under `MEDIA_ROOT/screenshots` with server-generated names + ownership-scoped retrieval endpoint (H-02); fabrication guard without `EURUSD`/`M15` defaults - missing identity yields `null` + WAIT, mock/stale data can never synchronize or authorize price levels (H-04); real MTF `conflicts` across H1/M15/M5/M1 with auxiliary timeframe fetches (H-05); walk-forward chronology validation + explicit not-walk-forward fallback marking (M-07/P-02) and one-signal-per-trade tests (P-03); no fabricated confidence intervals (`[]` whenever uncalibrated, M-08); strict 400 validation for candle queries and trade-plan requests with generic, log-only error details (M-03/M-05/L-02); provider mode derived from the class hierarchy (M-04); MT5 credentials/suffix wired into the factory, last-bar staleness + weekend market-closure labeling (H-09). 86 new tests.
 - **Phase 11D - professional trading dashboard (frontend + supporting backend)**: repaired login/register token flow (persistent token, boot re-validation via `/api/auth/me/`, logout, protected routes, session-expiry banner, verbatim DRF/Django field errors); dark responsive shell (collapsible sidebar, symbol/timeframe selectors, MT5 connection + real data-freshness indicators, profile menu, mobile drawer, loading/empty/error states everywhere); TradingView Lightweight Charts v5 chart with real OHLC, BOS/CHOCH/MSS markers anchored to confirmation bars, FVG/order-block zones via a custom series primitive, liquidity + validated entry/SL/TP price lines (backend numbers only, missing levels never drawn); screenshot-analysis workspace (PNG/JPEG upload, preview, full structured result with evidence/disagreements/uncertainty, save & reopen); MTF panel with real conflicts and honest Unavailable states; analysis-only risk panel (no execution controls - enforced by test); journal + owner-scoped analysis history. Backend additions: `GET /api/structure/` (detectors + MTF + freshness), `GET /api/analysis/` (history), freshness labels on `/api/mt5/candles/`, enriched journal search fields. Frontend Vitest suite 92 tests; 17 new backend tests.
 
+- **Phase 11E - advanced ICT/SMC intelligence + LangGraph**: see `PHASE_11E.md`.
+- **Phase 11F - journal, analytics & reporting + infra/doc errata (WS-E/WS-F)**: journal now records every MASTER_SPEC §3.H field (screenshot link via FK, analysis timestamp, market snapshot, detected structures, model/strategy version, estimated probability when available) with full owner-scoped CRUD, an honest performance aggregate (`win_rate`/`average_rr`/`total_pnl`/`expectancy`/`profit_factor`/`max_drawdown` - each `null` when unrecorded, with sample sizes), and CSV/JSON export; read-only `GET /api/backtests/` surfaces the caller's recorded runs (owner FK added; unowned runs never exposed). Validation errors answer 400; DRF's `?format=` override disabled so `?format=csv` works. Doc/config errata: README claim corrected, `docs/API.md` regenerated against routes, `ROADMAP.md` status table refreshed, phase-report errata addenda (PHASE_02/04/06/08), `.env.example` mock-first (`MT5_USE_MOCK=true`), production HSTS on by default, `redact_text`/`JsonFormatter` redact URL userinfo + structured extras, login bad-credentials → 401. 29 new backend tests (394 total).
+
 ## Incomplete features (not yet implemented)
 
 - Profile/settings update API (`/api/auth/me/profile/`) and object-level authorization hardening.
-- Backtest HTTP API, performance analytics endpoints, journal export.
+- Password reset (documented out of scope - audit L-07).
+- Backtest HTTP **run** endpoint and per-run equity curve (only read-only history is exposed).
 - Windows MT5 worker live validation (requires Windows terminal + broker credentials; mock only so far).
 - Optional LightGBM probability model (probability deliberately returns null today).
-- GitHub-hosted CI execution (workflow exists, not yet run on GitHub).
-- Docker image build/run verification (Docker unavailable on the dev machine — configs untested).
+- GitHub-hosted CI execution (workflow exists; the Phase 11E push may have triggered it - outcome not observed here).
+- Docker image build/run verification (Docker unavailable on the dev machine - configs untested/blocked).
 
 - LangGraph orchestration (MASTER_SPEC section 2): **implemented and wired in Phase 11E** (ADR-012) — `analyze()` is a façade over a 10-node LangGraph `StateGraph` whose nodes are bound `ScreenshotAnalysisService` methods (the deterministic engine stays authoritative).
 
@@ -111,15 +117,16 @@
 - Real-provider LLM behavior is verified only for Google Gemini (`gemini-3.8-flash`, live-tested 2026-10-09); OpenAI adapter paths remain unit-tested only. Google retires models without notice (`gemini-2.5-flash` now → HTTP 404) — keep `*_LLM_MODEL` current.
 - Phase 11D/11E frontend behavior is covered by the jsdom unit/integration suite (111 tests, 11 files); no browser-based visual/e2e verification was run — the owner should click through `/dashboard` and `/dashboard/chart` against the running backend.
 - Frontend `npm test` is not yet wired into `.github/workflows/ci.yml` (one-line addition; left for owner confirmation).
+- Phase 11F deferrals (recorded, not silently dropped): **L-01** (health endpoints stay open by design; WS-connect throttling optional) and **L-05** (swing equality asymmetry is a behavioural change deferred to avoid unverified golden-fixture churn; stub `tests.py` cleanup done where safe).
 
 ## Test status
 
 - Live LLM verification (Phase 11B, 2026-10-09): real Gemini reasoning + vision HTTP 200 via `manage.py llm_smoke`; end-to-end `analyze()` with real MT5 data → deterministic SELL retained over a bullish LLM reading (disagreement recorded, `resolved=True`); transient Google 503s surfaced loudly in `errors`, never mocked.
 
-- `uv run pytest` → **361 passed, 0 failed, 0 skipped** (2026-10-14, Phase 11E; 303 at 11D; hermetic mock-only)
+- `uv run pytest` → **394 passed, 0 failed, 0 skipped** (2026-10-14, Phase 11F; 361 at 11E; hermetic mock-only)
 - `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated; 11C repaired two out-of-order fixture generators, no assertions changed)
-- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-14)
-- Frontend `npm test` (vitest) → **111 passed, 0 failed**, 11 files (2026-10-14, Phase 11E; 92/10 at 11D)
+- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-14, Phase 11F)
+- Frontend `npm test` (vitest) → **111 passed, 0 failed**, 11 files (2026-10-14, Phase 11E; unchanged in 11F)
 - Frontend `tsc --noEmit` → 0 errors; `next build` → clean, all 11 routes compiled + prerendered (2026-10-14, Phase 11E)
 - Live smoke test: `GET /api/health/` → `200 OK` on runserver (2026-10-08)
 - Live MT5 timestamp check (11A.5): auto-measured server offset +3.0002 h; candles normalized
@@ -127,14 +134,18 @@
 
 ## Next phase
 
-- **Phase 11E - advanced ICT/SMC intelligence + LangGraph: IMPLEMENTED 2026-10-14**
-  (`docs/PHASE_REPORTS/PHASE_11E.md`), **awaiting owner approval**. Remaining audit
-  remediation (M-10..M-16, H-10 docs pass, L-01/L-03..L-07) and Phase 11F (WS-E/WS-F):
-  **NOT started - explicit owner approval required. Approval is never implied.**
+- **Phase 11F - journal, analytics & reporting + infra/doc errata: IMPLEMENTED 2026-10-14**
+  (`docs/PHASE_REPORTS/PHASE_11F.md`), **awaiting owner approval**. Phase 11G (live-MT5
+  integration, end-to-end AI analysis, forward-testing engine + dashboard, reliability testing)
+  is **NOT started - explicit owner approval required, and its live-MT5/live-LLM steps must be
+  run manually by the owner (no MT5 terminal / no live provider keys in this environment).
+  Approval is never implied.**
 
 ## Blockers
 
-- None.
+- Docker image build + compose run and GitHub-CI execution remain **unverified** (no Docker host
+  in the development environment; CI runs on GitHub, not observable locally). These are the only
+  open WS-F items and are recorded as blocked, not done.
 
 ## Commit references
 
@@ -146,3 +157,5 @@
 - Phase 11B LLM providers (`5b6a518`) and live Gemini verification (`a0f4b89`).
 - Phase 11C remediation (`docs/PHASE_REPORTS/PHASE_11C.md`, audit status banners, this file) - the commit following `a0f4b89` (see `git log`).
 - Phase 11D dashboard (`959b1ad`) - frontend + supporting backend endpoints, docs.
+- Phase 11E (`f8c5565`) - advanced ICT/SMC intelligence + LangGraph; pushed to `origin/main`.
+- Phase 11F - journal/analytics (WS-E) + doc/config errata (WS-F) - **uncommitted working tree** pending owner review.

@@ -70,3 +70,12 @@ Implement a secure, Windows-oriented MT5 market data integration with a clear pr
 ## 7. Next phase
 
 **Phase 3** (per roadmap Phase 4 — Market structure engine) or as approved: implement 19 detectors (deterministic, no look-ahead) with unit tests.
+---
+
+## Errata addendum (Phase 11F, 2026-10-14)
+
+This report described "OHLC validation / staleness helpers / configurable retry" as delivered. A
+later audit (H-09 / M-series) found those checks were dead and the retry env vars unused.
+**Errata:** at Phase 2 time the OHLC/freshness validation was not effective. It was implemented
+properly, with tests, in Phases 11A/11C (staleness + market-closure labelling in `marketdata/`).
+History is not rewritten; this addendum records the correction (audit H-10).

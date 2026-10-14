@@ -39,6 +39,9 @@ _KEY_VALUE_RE = re.compile(
 # Matches `Token abc123` / `Bearer abc123` auth headers.
 _BEARER_RE = re.compile(r"(?i)\b(token|bearer)\b(\s+)([A-Za-z0-9\-_.+/=]+)")
 
+# Matches URL userinfo, e.g. `postgres://user:secret@host/db` (audit L-03).
+_URL_USERINFO_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)([^/\s:@]+):([^/\s@]+)@")
+
 
 def redact_text(text: str) -> str:
     """Mask credential-like substrings in *text*. Never raises."""
@@ -48,7 +51,29 @@ def redact_text(text: str) -> str:
     # key=value pass would consume only the word "Token" and leak the value.
     out = _BEARER_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{REDACTED}", text)
     out = _KEY_VALUE_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{REDACTED}", out)
+    # URL credentials: strip the whole `user:pass@` userinfo segment.
+    out = _URL_USERINFO_RE.sub(lambda m: f"{m.group(1)}{REDACTED}@", out)
     return out
+
+
+def redact_value(value: Any, key: str | None = None) -> Any:
+    """Recursively redact credential-like strings inside JSON-ish structures.
+
+    Structured log ``extra`` fields bypass ``record.getMessage()``, so a secret
+    attached as an extra (e.g. ``logger.info("x", extra={"token": tok})``) must be
+    redacted here too (audit L-03). Values under a sensitive key name are masked
+    outright; other strings are passed through :func:`redact_text`.
+    """
+    sensitive = key is not None and key.lower() in SENSITIVE_KEYS
+    if isinstance(value, dict):
+        return {item_key: redact_value(item, item_key) for item_key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact_value(item) for item in value]
+    if isinstance(value, str):
+        return REDACTED if sensitive else redact_text(value)
+    if sensitive:
+        return REDACTED
+    return value
 
 
 class SecretRedactionFilter(logging.Filter):
@@ -89,5 +114,6 @@ class JsonFormatter(logging.Formatter):
         standard = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__)
         for key, value in record.__dict__.items():
             if key not in standard and key not in payload and not key.startswith("_"):
-                payload[key] = value if isinstance(value, (str, int, float, bool, type(None), list, dict)) else str(value)
+                # Extras never pass through getMessage(), so redact them here too.
+                payload[key] = redact_value(value, key)
         return json.dumps(payload, ensure_ascii=False, default=str)

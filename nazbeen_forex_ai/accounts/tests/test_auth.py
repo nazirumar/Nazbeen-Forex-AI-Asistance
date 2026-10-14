@@ -80,7 +80,7 @@ def test_login_rejects_bad_credentials_without_leaking(
         reverse("accounts:login"),
         {"username": username, "password": password},
     )
-    assert response.status_code == 400
+    assert response.status_code == 401
     # Uniform message — never reveals whether the account exists.
     assert response.json() == {"detail": "Invalid credentials."}
 

@@ -38,3 +38,28 @@ def test_installed_apps_include_project_apps() -> None:
 
     assert "nazbeen_forex_ai.core" in settings.INSTALLED_APPS
     assert "rest_framework" in settings.INSTALLED_APPS
+
+
+def test_production_settings_default_hsts_on(monkeypatch) -> None:
+    """L-04: HSTS must be on by default in production (override to disable)."""
+    import nazbeen_forex_ai.settings.base as base_module
+
+    monkeypatch.setattr(base_module, "SECRET_KEY", "prod-test-key-not-insecure")
+    monkeypatch.delenv("SECURE_HSTS_SECONDS", raising=False)
+    sys.modules.pop("nazbeen_forex_ai.settings.production", None)
+    try:
+        prod = importlib.import_module("nazbeen_forex_ai.settings.production")
+        assert prod.SECURE_HSTS_SECONDS == 31536000
+        assert prod.SECURE_HSTS_INCLUDE_SUBDOMAINS is True
+        assert prod.SECURE_HSTS_PRELOAD is True
+    finally:
+        sys.modules.pop("nazbeen_forex_ai.settings.production", None)
+
+
+def test_env_example_defaults_to_mock_market_data() -> None:
+    """M-12: the template must be mock-first, never claim live MT5 data."""
+    from django.conf import settings
+
+    text = (settings.BASE_DIR / ".env.example").read_text(encoding="utf-8")
+    assert "MT5_USE_MOCK=true" in text
+    assert "MT5_USE_MOCK=false" not in text

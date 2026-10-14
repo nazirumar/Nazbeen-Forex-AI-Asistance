@@ -106,3 +106,16 @@ There is no CI job for the smoke test (it needs real keys); it is a manual, docu
 
 Helpers: `structure/tests/candles.py` (fixture builder) and `structure/tests/golden.py`
 (deterministic golden fixtures). All hermetic — no network, no MT5, no real keys.
+
+## Phase 11F backend tests
+
+| File | Focus |
+|---|---|
+| `journal/tests/test_journal_11f.py` (26) | Spec §3.H field round-trip; **unset fields stay `null`/`{}` (never invented)**; linking a `ScreenshotAnalysis` derives symbol/timeframe/snapshot/structures/model version but cannot link another user's analysis; invalid outcome/non-finite number/bad JSON → 400; owner-scoped retrieve/patch/delete (other user → 404); search filters; performance math on recorded data and `null` when P&L was never recorded; CSV/JSON export (content-type, header, owner-scoped); invalid export format → 400. |
+| `backtesting/tests/test_backtest_history_api.py` (3) | `GET /api/backtests/` returns only the caller's runs; unowned runs are **not** exposed; unauthenticated → 401/403; empty payload shape. |
+| `core/tests/test_logging.py` (8, +2) | L-03: `redact_text` masks URL userinfo (`scheme://user:pass@host`); `JsonFormatter` redacts structured `extra` fields (including secrets nested in dicts) while preserving non-secrets. |
+| `core/tests/test_settings.py` (5, +2) | L-04: production defaults HSTS on (`31536000`, include-subdomains/preload). M-12: `.env.example` ships `MT5_USE_MOCK=true` and never `false`. |
+| `accounts/tests/test_auth.py` (updated) | L-07: login bad credentials answer `401` (uniform message). |
+
+Hermetic throughout: in-memory SQLite, LocMemCache, mock providers. The `URL_FORMAT_OVERRIDE=None`
+setting (ADR-013) is exercised by the export tests.

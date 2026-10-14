@@ -8,18 +8,22 @@
 
 | Phase | Name | Scope summary | Status |
 |-------|------|---------------|--------|
-| 1 | Foundation | Docs, Django scaffold, env config, health endpoint, test harness, CI | see `PROJECT_PROGRESS.md` |
-| 2 | Accounts & API base | Auth, user settings/timezones, rate limiting, upload groundwork | not started |
-| 3 | MT5 data layer | Windows MT5 worker, provider interface, mock adapter, candle storage, freshness | not started |
-| 4 | Market structure engine | All 19 detectors, config, unit tests, no look-ahead | not started |
-| 5 | Trading model & risk | Bullish/bearish sequences, WAIT logic, risk mgmt, position sizing | not started |
-| 6 | Screenshot & AI pipeline | Upload pipeline, LangGraph orchestration, vision LLM, structured outputs | not started |
-| 7 | Probability engine | Outcomes, chronological splits, walk-forward, calibration, drift | not started |
-| 8 | Journal & analytics | Journal records, outcome evaluation, performance reports | not started |
-| 9 | Frontend | Next.js dashboard, charts, WS updates, all screens | not started |
-| 10 | Infra & ops | Docker Compose, Channels, Celery/Redis, structured logging, e2e, hardening | not started |
+| 1 | Foundation | Docs, Django scaffold, env config, health endpoint, test harness, CI | complete |
+| 2 | Accounts & API base | Auth, user settings/timezones, rate limiting, upload groundwork | complete |
+| 3 | MT5 data layer | Windows MT5 worker, provider interface, mock adapter, candle storage, freshness | complete |
+| 4 | Market structure engine | All 19 detectors, config, unit tests, no look-ahead | complete |
+| 5 | Trading model & risk | Bullish/bearish sequences, WAIT logic, risk mgmt, position sizing | complete |
+| 6 | Screenshot & AI pipeline | Upload pipeline, LangGraph orchestration, vision LLM, structured outputs | complete |
+| 7 | Probability engine | Outcomes, chronological splits, walk-forward, calibration, drift | complete |
+| 8 | Journal & analytics | Journal records, outcome evaluation, performance reports | complete (journal extended in 11F) |
+| 9 | Frontend | Next.js dashboard, charts, WS updates, all screens | complete |
+| 10 | Infra & ops | Docker Compose, Channels, Celery/Redis, structured logging, e2e, hardening | complete (Docker/CI verification blocked — see 11F report) |
+| 11 | Audit remediation & advanced ICT/SMC | WS-A–WS-F: correctness/safety batches, frontend MVP, detectors + LangGraph, journal/analytics, infra errata | 11A–11E complete; **11F in progress** |
 
-## Phase 1 — Foundation (current)
+> Authoritative phase state lives in `docs/PROJECT_PROGRESS.md`; per-phase evidence lives in
+> `docs/PHASE_REPORTS/`.
+
+## Phase 1 — Foundation
 
 **Goal:** a runnable, tested, documented backend skeleton that later phases build on, with basic auth and a dashboard shell. (Expanded beyond the original narrow skeleton per the Phase 1 owner's acceptance scope.)
 

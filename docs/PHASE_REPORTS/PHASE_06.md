@@ -24,3 +24,13 @@ Costs (spread/commission/slippage) modeled conceptually; trade simulation is con
 
 ## 5. Next phase
 Await approval.
+
+---
+
+## Errata addendum (Phase 11F, 2026-10-14)
+
+This report described "basic trade simulation / metrics". A later audit (CRIT-01) found the
+outcomes were **dummy**, not simulated. **Errata:** the backtest engine was rebuilt in Phase 11A
+with real SL/TP/end-of-data resolution, costs (spread/slippage/commission) and metrics computed
+from a concrete trade list. History is not rewritten; this addendum records the correction
+(audit H-10).

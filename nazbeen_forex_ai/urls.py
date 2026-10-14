@@ -15,4 +15,5 @@ urlpatterns = [
     path("api/", include("nazbeen_forex_ai.risk.urls")),
     path("api/", include("nazbeen_forex_ai.backtesting.urls")),
     path("api/", include("nazbeen_forex_ai.journal.urls")),
+    path("api/", include("nazbeen_forex_ai.forwardtest.urls")),
 ]

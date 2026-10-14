@@ -308,3 +308,44 @@ long-blocked Docker build/run and GitHub-CI verification (audit M-11/M-13).
 - Docker/CI status is evidence-based (see `docs/PHASE_REPORTS/PHASE_11G.md`): the GitHub Actions
   run for the 11F push is checked directly; the image build is attempted against a live daemon.
 - No live-trading, MT5 or LLM behaviour is enabled by this phase.
+## ADR-015 - Phase 11G backtest execution, MT5 symbol metadata, and simulated forward testing
+
+### Context
+
+Phase 11G had to add, without breaking Phase 11A–11F contracts: (a) an MT5 symbol-metadata
+endpoint, (b) an HTTP surface to *run* a backtest and inspect its trades/metrics/equity/export,
+(c) a **simulated** forward-testing engine + dashboard, and (d) a typed journal origin so manual,
+screenshot, backtest and forward-test rows are never conflated. The platform must stay
+analysis-only (no order execution) and must never fabricate market data or metrics.
+
+### Decision
+
+1. **All additions are additive/backward-compatible.** `BacktestRun` gains `status`, `error`,
+   `config`, `strategy_version`, `is_walk_forward`, `note`, `data_source`, `started_at`,
+   `finished_at` **with `status` defaulting to `completed`**, so Phase 11F rows keep their meaning
+   and `GET /api/backtests/` keeps its contract. New `BacktestTrade` rows persist each simulated
+   trade so metrics are recomputed from stored data only. Engine portfolio stops and
+   `walk_forward(**run_kwargs)` are added with defaults that preserve prior behaviour.
+2. **The provider interface is extended without breaking subclasses.**
+   `MarketDataProvider.get_symbol_info` is a **concrete** base method that raises
+   `MarketDataProviderError`; a provider that cannot supply metadata yields **503**, never a
+   fabricated digits/point/tick value. Mock metadata is explicitly labelled `source: mock`.
+3. **Forward testing is a first-class *simulated* app** (`nazbeen_forex_ai.forwardtest`): the
+   deterministic engine is observed bar-by-bar on fetched candles, one row per `(run, bar_time)`
+   (dedupe), with a checkpoint, conservative **stop-first** outcome tracking, and a Celery `heavy`
+   task that records a safe failure instead of fabricating a decision. Nothing places, routes or
+   simulates a broker order.
+4. **The journal gains typed origin** (`source` + opaque `source_ref`) rather than a hard FK, to
+   avoid a dependency on the forward-testing app; journal rows from an observation are labelled
+   `source="forward_test"` and tagged `simulated`.
+5. **Honesty conventions are unchanged**: metrics that cannot be computed are `null` (with sample
+   sizes / notes), mock vs live is always labelled, and forward-test results are always labelled
+   simulated.
+
+### Consequences
+
+- `POST/GET /api/backtests/runs/…` and `/api/forwardtests/…` are new; `GET /api/backtests/`
+  and all 11A–11F endpoints are unchanged.
+- Migrations: `backtesting/0003_…`, `journal/0003_…`, `forwardtest/0001_initial.py`.
+- Live MT5 symbol metadata and live LLM behaviour remain owner-manual and **NOT VERIFIED** here;
+  all automated coverage runs against labelled mock providers.

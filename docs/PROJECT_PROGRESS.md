@@ -6,19 +6,21 @@
 ## Current phase
 
 **Phase 11G - Real MT5 Integration, Advanced Backtesting, AI Analysis Validation & Demo Forward
-Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting API) and WS3
-(backtesting dashboard) are implemented, tested and green; WS1/WS4/WS5/WS6/WS7 remain outstanding.
+Testing** — **IMPLEMENTED, AWAITING OWNER APPROVAL** (2026-10-14). All workstreams landed: WS1 (MT5
+symbol-metadata endpoint), WS2 (backtest execution/reporting API), WS3 (backtesting dashboard), WS4
+(simulated forward-testing engine + dashboard + §10 journal linkage), WS5 (§3/§4 regression
+verification), WS6 (journal source typing), WS7 (docs + live-verification recording).
 
-> 11G is a large phase and is being delivered in reviewable increments. Landed so far: a full
-> simulated-backtest execution/reporting API (`/api/backtests/runs/…` create/list/detail/trades/
-> metrics/equity/export + `/api/backtests/config/`), `BacktestTrade` persistence, additive
-> `BacktestRun` fields, Celery execution with failure capture, additive engine portfolio stops
-> (max daily loss / max drawdown), `walk_forward(**run_kwargs)`, and the `/dashboard/backtests`
-> console. Backend **423 passed**; frontend **132 passed / 14 files**; `tsc`/`next build` clean.
-> Remaining (see `docs/PHASE_REPORTS/PHASE_11G.md` §4.4): MT5 symbol-metadata endpoint (WS1),
-> forward-testing engine + dashboard + journal source discriminator (WS4/§10), §3/§4 regression
-> verification (WS5), journal source typing (WS6), remaining docs + live MT5/LLM verification (WS7).
-> No live MT5/LLM verification has been performed from this environment.
+> Delivered this phase: `GET /api/mt5/symbol-info/`; the full backtest execution/reporting surface
+> (`/api/backtests/runs/…` create/list/detail/trades/metrics/equity/export + `/api/backtests/config/`)
+> with `BacktestTrade` persistence and additive engine portfolio stops; the new `forwardtest` app
+> (simulated forward-testing models, service, Celery task, owner-scoped API, `/dashboard/forward`
+> console) with typed journal linkage (`source=forward_test`); journal `source`/`source_ref` typing.
+> **Backend 468 passed, 0 failed** (was 423); **frontend 140 passed / 15 files** (was 132/14);
+> `manage.py check` clean; migrations clean; `tsc` exit 0; `next build` exit 0 (16 routes).
+> **Live MT5 and live LLM verification remain NOT VERIFIED** — no MT5 terminal and no provider keys
+> exist in this environment, so all MT5/LLM paths are exercised through the labelled mock providers
+> only; the live steps must be run manually by the owner.
 
 > Phase 11F closed WS-E (journal spec §3.H fields, full CRUD, performance/export, read-only
 > owner-scoped backtest history - audit M-15/P2.5) and WS-F (doc/config errata - H-10, M-12,
@@ -46,7 +48,7 @@ Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting AP
 | 11D | Professional Trading Dashboard (frontend + supporting endpoints) | `docs/PHASE_REPORTS/PHASE_11D.md` | 2026-10-10 |
 | 11E | Advanced ICT/SMC Intelligence and LangGraph (WS-D) | `docs/PHASE_REPORTS/PHASE_11E.md` | 2026-10-14 |
 | 11F | Journal, Analytics & Reporting + Infra Verification & Doc Errata (WS-E/WS-F) | `docs/PHASE_REPORTS/PHASE_11F.md` | 2026-10-14 |
-| 11G | Real MT5 Integration, Advanced Backtesting, AI Analysis Validation & Demo Forward Testing | `docs/PHASE_REPORTS/PHASE_11G.md` | **IN PROGRESS** (WS2/WS3 done) |
+| 11G | Real MT5 Integration, Advanced Backtesting, AI Analysis Validation & Demo Forward Testing | `docs/PHASE_REPORTS/PHASE_11G.md` | 2026-10-14 (awaiting owner approval) |
 
 ## Completed features
 
@@ -63,7 +65,7 @@ Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting AP
   resilient rate limiting (ADR-008) so throttled endpoints don't 500 when Redis is down.
 - Next.js 15 frontend (TypeScript + Tailwind): dashboard shell, auth panel, health/status cards,
   direct-backend API helper (CORS), frontend `/api/health` probe. Builds/typechecks clean.
-- Test harness: pytest + pytest-django, **361 backend tests passing** (2026-10-14, full suite; 303 at 11D; +58 in 11E); frontend Vitest suite **111 tests** (2026-10-14, 11 files; 92/10 at 11D).
+- Test harness: pytest + pytest-django, **468 backend tests passing** (2026-10-14, full suite; 423 at 11G WS2, 394 at 11F, 303 at 11D); frontend Vitest suite **140 tests** (2026-10-14, 15 files; 132/14 at 11G WS3, 111/11 at 11E, 92/10 at 11D).
 - CI workflow (`.github/workflows/ci.yml`): backend (`check`, `makemigrations --check --dry-run`, `pytest`) + frontend (`npm ci`, `typecheck`, `build`).
 - Dev tooling: `docker-compose.yml` (Postgres + Redis, plus an `app` profile adding
   backend/worker/frontend containers), PowerShell scripts (`scripts/start-infra.ps1`,
@@ -107,15 +109,16 @@ Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting AP
 - **Phase 11E - advanced ICT/SMC intelligence + LangGraph**: see `PHASE_11E.md`.
 - **Phase 11F - journal, analytics & reporting + infra/doc errata (WS-E/WS-F)**: journal now records every MASTER_SPEC §3.H field (screenshot link via FK, analysis timestamp, market snapshot, detected structures, model/strategy version, estimated probability when available) with full owner-scoped CRUD, an honest performance aggregate (`win_rate`/`average_rr`/`total_pnl`/`expectancy`/`profit_factor`/`max_drawdown` - each `null` when unrecorded, with sample sizes), and CSV/JSON export; read-only `GET /api/backtests/` surfaces the caller's recorded runs (owner FK added; unowned runs never exposed). Validation errors answer 400; DRF's `?format=` override disabled so `?format=csv` works. Doc/config errata: README claim corrected, `docs/API.md` regenerated against routes, `ROADMAP.md` status table refreshed, phase-report errata addenda (PHASE_02/04/06/08), `.env.example` mock-first (`MT5_USE_MOCK=true`), production HSTS on by default, `redact_text`/`JsonFormatter` redact URL userinfo + structured extras, login bad-credentials → 401. 29 new backend tests (394 total).
 
+- **Phase 11G - real MT5 integration, advanced backtesting, AI analysis validation & demo forward testing**: `GET /api/mt5/symbol-info/` exposes real MT5 symbol metadata (or labelled mock), **503** when a provider cannot supply it (never fabricated); the full backtest execution/reporting surface (`POST/GET /api/backtests/runs/`, detail/trades/metrics/equity/export, `GET /api/backtests/config/`) persists every simulated trade (`BacktestTrade`) and computes §6 metrics from stored trades only (`null` when not computable, `profit_factor` null+note when there are no losing trades); additive engine portfolio stops (max daily loss / max drawdown) and `walk_forward(**run_kwargs)`; the new `forwardtest` app runs a **simulated** forward test (deterministic engine observed bar-by-bar, per-bar dedupe, checkpointing, conservative SL-first outcome tracking, Celery failure capture) with an owner-scoped API and `/dashboard/forward` console; journal rows gained typed `source`/`source_ref` (manual/screenshot_analysis/backtest/forward_test) with a typed linkage from observations. 45 new backend tests (468 total); 8 new frontend tests (140/15). Live MT5 + live LLM verification remain **NOT VERIFIED** (no terminal/keys here).
+
 ## Incomplete features (not yet implemented)
 
 - Profile/settings update API (`/api/auth/me/profile/`) and object-level authorization hardening.
 - Password reset (documented out of scope - audit L-07).
-- Backtest HTTP **run** endpoint and per-run equity curve (only read-only history is exposed).
 - Windows MT5 worker live validation (requires Windows terminal + broker credentials; mock only so far).
+- Live LLM provider verification (OpenAI adapter unit-tested only; Gemini live-tested 2026-10-09).
 - Optional LightGBM probability model (probability deliberately returns null today).
-- GitHub-hosted CI execution (workflow exists; the Phase 11E push may have triggered it - outcome not observed here).
-- Docker image build/run verification (Docker unavailable on the dev machine - configs untested/blocked).
+- Optional Celery-beat schedule for automatic forward-test observation (observation is currently manual via the API/console).
 
 - LangGraph orchestration (MASTER_SPEC section 2): **implemented and wired in Phase 11E** (ADR-012) — `analyze()` is a façade over a 10-node LangGraph `StateGraph` whose nodes are bound `ScreenshotAnalysisService` methods (the deterministic engine stays authoritative).
 
@@ -124,11 +127,12 @@ Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting AP
 - PostgreSQL support configured via `DATABASE_URL` but not yet tested against a live server.
 - Docker stack (backend/worker/frontend images) **builds successfully** — `docker compose --profile app build` verified 2026-10-14. A full compose **run** of the app profile has not been exercised here.
 - Redis channel layer (`USE_REDIS_CHANNELS=true`) configured but only the in-memory layer is tested.
-- GitHub Actions CI workflow **executed**: run #12 for `4ebbc10` → `conclusion: success` (2026-10-14).
-- MT5 suffix handling, staleness and the weekend market-closure heuristic (Phase 11C) are verified against a mocked connector only; live-broker symbol naming and holiday calendars remain manual/local verification. `MEDIA_ROOT` serving for production (reverse proxy) is not wired — the screenshot API streams files itself.
+- GitHub Actions CI workflow **executed**: run #12 for `4ebbc10` → `conclusion: success` (2026-10-14). The Phase 11G increment (`f1394bd` + working tree) has not been pushed, so no CI run covers it yet.
+- MT5 suffix handling, staleness and the weekend market-closure heuristic (Phase 11C) are verified against a mocked connector only; live-broker symbol naming and holiday calendars remain manual/local verification. `MEDIA_ROOT` serving for production (reverse proxy) is not wired — the screenshot API streams files itself. The Phase 11G `GET /api/mt5/symbol-info/` real-MT5 path is likewise verified against the mock provider only.
+- **Live MT5 + live LLM verification for Phase 11G is NOT VERIFIED** — no MetaTrader5 terminal and no provider API keys exist in this environment. All MT5/LLM code paths in 11G are exercised through the labelled mock providers only; the live steps must be run manually by the owner.
 
 - Real-provider LLM behavior is verified only for Google Gemini (`gemini-3.8-flash`, live-tested 2026-10-09); OpenAI adapter paths remain unit-tested only. Google retires models without notice (`gemini-2.5-flash` now → HTTP 404) — keep `*_LLM_MODEL` current.
-- Phase 11D/11E frontend behavior is covered by the jsdom unit/integration suite (111 tests, 11 files); no browser-based visual/e2e verification was run — the owner should click through `/dashboard` and `/dashboard/chart` against the running backend.
+- Frontend behavior is covered by the jsdom unit/integration suite (140 tests, 15 files); no browser-based visual/e2e verification was run — the owner should click through `/dashboard` and `/dashboard/chart` against the running backend.
 - Frontend `npm test` is not yet wired into `.github/workflows/ci.yml` (one-line addition; left for owner confirmation).
 - Phase 11F deferrals (recorded, not silently dropped): **L-01** (health endpoints stay open by design; WS-connect throttling optional) and **L-05** (swing equality asymmetry is a behavioural change deferred to avoid unverified golden-fixture churn; stub `tests.py` cleanup done where safe).
 
@@ -136,29 +140,30 @@ Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting AP
 
 - Live LLM verification (Phase 11B, 2026-10-09): real Gemini reasoning + vision HTTP 200 via `manage.py llm_smoke`; end-to-end `analyze()` with real MT5 data → deterministic SELL retained over a bullish LLM reading (disagreement recorded, `resolved=True`); transient Google 503s surfaced loudly in `errors`, never mocked.
 
-- `uv run pytest` → **423 passed, 0 failed, 0 skipped** (2026-10-14, Phase 11G WS2; 394 at 11F; hermetic mock-only)
+- `uv run pytest` → **468 passed, 0 failed, 0 skipped** (2026-10-14, Phase 11G complete; 423 at 11G WS2, 394 at 11F; hermetic mock-only)
 - `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated; 11C repaired two out-of-order fixture generators, no assertions changed)
-- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-14, Phase 11G WS2)
-- Frontend `npm test` (vitest) → **132 passed, 0 failed**, 14 files (2026-10-14, Phase 11G WS3; 111/11 at 11E)
-- Frontend `tsc --noEmit` → 0 errors; `next build` → clean, all 15 routes compiled + prerendered (2026-10-14, Phase 11G)
+- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-14, Phase 11G complete)
+- Frontend `npm test` (vitest) → **140 passed, 0 failed**, 15 files (2026-10-14, Phase 11G; 132/14 at WS3, 111/11 at 11E). On Windows the runner occasionally fails to spawn a worker (workspace path has spaces) — run with `--no-file-parallelism`.
+- Frontend `tsc --noEmit` → 0 errors; `next build` → clean, all 16 routes compiled + prerendered (2026-10-14, Phase 11G; 15 routes before `/dashboard/forward`)
 - Live smoke test: `GET /api/health/` → `200 OK` on runserver (2026-10-08)
 - Live MT5 timestamp check (11A.5): auto-measured server offset +3.0002 h; candles normalized
   to UTC in the past; zero future timestamps (2026-10-09, MetaQuotes-Demo, local machine)
 
 ## Next phase
 
-- **Phase 11F - journal, analytics & reporting + infra/doc errata: IMPLEMENTED 2026-10-14**
-  (`docs/PHASE_REPORTS/PHASE_11F.md`), **awaiting owner approval**. Phase 11G (live-MT5
-  integration, end-to-end AI analysis, forward-testing engine + dashboard, reliability testing)
-  is **NOT started - explicit owner approval required, and its live-MT5/live-LLM steps must be
-  run manually by the owner (no MT5 terminal / no live provider keys in this environment).
-  Approval is never implied.**
+- **Phase 11G — real MT5 integration, advanced backtesting, AI analysis validation & demo forward
+  testing: IMPLEMENTED 2026-10-14** (`docs/PHASE_REPORTS/PHASE_11G.md`), **awaiting owner approval**.
+  Live MT5/live LLM steps must be run manually by the owner (no MT5 terminal / no live provider keys
+  in this environment). Phase 11H (recommended plan in `PHASE_11G.md` §6: scheduled forward-test
+  observation, live-verification harness, per-source journal analytics, full compose run) is
+  **NOT started — explicit owner approval required. Approval is never implied.**
 
 ## Blockers
 
-- Docker image build + compose run and GitHub-CI execution remain **unverified** (no Docker host
-  in the development environment; CI runs on GitHub, not observable locally). These are the only
-  open WS-F items and are recorded as blocked, not done.
+- Live MT5 terminal verification (symbol-info + candle sync) and live LLM provider verification are
+  **blocked in this environment** (no terminal, no provider keys) — owner-manual steps.
+- Full `docker compose --profile app up` end-to-end run remains **unverified** here (images build;
+  full-stack run not exercised). Recorded as blocked, not done.
 
 ## Commit references
 
@@ -171,4 +176,6 @@ Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting AP
 - Phase 11C remediation (`docs/PHASE_REPORTS/PHASE_11C.md`, audit status banners, this file) - the commit following `a0f4b89` (see `git log`).
 - Phase 11D dashboard (`959b1ad`) - frontend + supporting backend endpoints, docs.
 - Phase 11E (`f8c5565`) - advanced ICT/SMC intelligence + LangGraph; pushed to `origin/main`.
-- Phase 11F - journal/analytics (WS-E) + doc/config errata (WS-F) - **uncommitted working tree** pending owner review.
+- Phase 11F (`4ebbc10`) - journal/analytics (WS-E) + doc/config errata (WS-F); pushed to `origin/main`; GitHub CI run #12 green.
+- Phase 11G WS2/WS3 (`f1394bd`) - backtest execution + reporting API and dashboard (committed locally, **not pushed**).
+- Phase 11G WS1/WS4/WS5/WS6/WS7 - MT5 symbol-info, forward testing, §3/§4 regression, journal source typing, docs - the commit following `f1394bd` (see `git log`); **not pushed** pending owner approval.

@@ -151,6 +151,7 @@ describe("Sidebar (mobile drawer + desktop collapse)", () => {
       "/dashboard/journal",
       "/dashboard/backtests",
       "/dashboard/analytics",
+      "/dashboard/forward",
       "/dashboard/mentor",
       "/dashboard/settings",
     ]);

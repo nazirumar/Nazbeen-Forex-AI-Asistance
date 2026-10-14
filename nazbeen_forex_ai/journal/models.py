@@ -24,6 +24,15 @@ class JournalEntry(models.Model):
         ("PENDING", "PENDING"),
     ]
 
+    # Phase 11G §10: typed origin so journal rows from manual entry, screenshot
+    # analysis, backtests and forward tests are never conflated.
+    SOURCE_CHOICES = [
+        ("manual", "manual"),
+        ("screenshot_analysis", "screenshot_analysis"),
+        ("backtest", "backtest"),
+        ("forward_test", "forward_test"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="journal_entries")
 
@@ -40,6 +49,11 @@ class JournalEntry(models.Model):
     # --- identity -----------------------------------------------------------
     symbol = models.CharField(max_length=20, blank=True, null=True)
     timeframe = models.CharField(max_length=10, blank=True, null=True)
+    # Phase 11G §10: origin discriminator (recorded, never inferred silently).
+    source = models.CharField(max_length=24, choices=SOURCE_CHOICES, default="manual")
+    # Optional opaque reference to the origin row (e.g. a BacktestRun or forward
+    # test id). Kept as a string so journal does not hard-depend on those apps.
+    source_ref = models.CharField(max_length=64, blank=True, default="")
 
     # --- spec §3.H recorded context ----------------------------------------
     analysis_timestamp = models.DateTimeField(blank=True, null=True)

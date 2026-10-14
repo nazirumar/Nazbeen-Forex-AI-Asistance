@@ -144,6 +144,38 @@ class MT5SymbolsView(APIView):
             return Response({"error": GENERIC_INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class MT5SymbolInfoView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request) -> Response:
+        """Per-symbol metadata (Phase 11G §2): digits, point, tick size/value, contract size.
+
+        Strict symbol validation → 400; provider failure → 503 with a generic
+        message (details stay server-side).
+        """
+        try:
+            symbol = _validate_symbol(request.query_params.get("symbol"))
+        except ValidationError as e:
+            return Response(
+                {"error": "Invalid request", "details": e.messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        provider = get_market_data_provider()
+        try:
+            provider.connect()
+            info = provider.get_symbol_info(symbol=symbol)
+            return Response(
+                {**info, "data_source": provider_mode(provider)},
+                status=status.HTTP_200_OK,
+            )
+        except MarketDataProviderError:
+            logger.exception("MT5 symbol info: provider failure symbol=%s", symbol)
+            return Response({"error": GENERIC_PROVIDER_ERROR}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except Exception:
+            logger.exception("MT5 symbol info: unexpected failure symbol=%s", symbol)
+            return Response({"error": GENERIC_INTERNAL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class MT5CandlesView(APIView):
     permission_classes = [IsAuthenticated]
 

@@ -89,6 +89,7 @@ Rate limiting: `auth` scope defaults to `10/min` (login/register). Defaults are 
 | `GET` | `/api/mt5/symbols/` | Symbol discovery (`?search=`). |
 | `GET` | `/api/mt5/candles/` | OHLCV for `M1/M5/M15/H1` (`?symbol=&timeframe=&count=&start=`). Every response carries `data_source` (`mock`/`mt5`) and UTC `Z` timestamps. Since Phase 11C/11D it also labels freshness: `market_state` (`open`/`closed`), `stale` (bool), `last_bar_age_sec` (`null` when unknown) and `threshold_sec` — the UI never guesses staleness client-side. |
 | `GET` | `/api/mt5/tick/` | Bid/ask/spread (`?symbol=`). Labeled `data_source`. |
+| `GET` | `/api/mt5/symbol-info/` | Real symbol metadata (`?symbol=`) from the provider: digits, point, tick size/value, contract size, spread, base/profit currency, volume min/max/step, trade mode. `source` is `mt5` or `mock` (labelled). Invalid/missing symbol → `400`; a provider that cannot supply metadata → `503` (never fabricated). Phase 11G WS1. |
 
 ### Market structure (Phase 11D, extended in 11E — detector output for the chart)
 
@@ -136,8 +137,8 @@ endpoints are scoped to the caller's own rows.
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/api/journal/entries/` | List/search the caller's entries. Query: `q` (notes text), `symbol`, `outcome`, `limit` (1–200, default 50). Returns `{count, entries:[…]}` with the full spec fields. A non-integer `limit` → `400`. |
-| `POST` | `/api/journal/entries/` | Create an entry. Optional `analysis_session_id` links a stored `ScreenshotAnalysis` and derives symbol/timeframe/market snapshot/structures/model version/analysis timestamp from it. Invalid `outcome`/numeric/JSON fields → `400`. |
+| `GET` | `/api/journal/entries/` | List/search the caller's entries. Query: `q` (notes text), `symbol`, `outcome`, `source`, `limit` (1–200, default 50). Returns `{count, entries:[…]}` with the full spec fields plus the Phase 11G `source`/`source_ref`. A non-integer `limit` → `400`. |
+| `POST` | `/api/journal/entries/` | Create an entry. Optional `analysis_session_id` links a stored `ScreenshotAnalysis` and derives symbol/timeframe/market snapshot/structures/model version/analysis timestamp from it. Optional `source` (`manual` default, `screenshot_analysis`, `backtest`, `forward_test`) + `source_ref` type the origin; a linked screenshot analysis defaults `source` to `screenshot_analysis`. Invalid `outcome`/`source`/numeric/JSON fields → `400`. |
 | `GET` | `/api/journal/entries/{uuid}/` | Retrieve one entry (owner-only; others → `404`). |
 | `PATCH`/`PUT` | `/api/journal/entries/{uuid}/` | Partial/full update (owner-only). |
 | `DELETE` | `/api/journal/entries/{uuid}/` | Delete (owner-only); `204` on success, `404` otherwise. |
@@ -176,6 +177,23 @@ cannot support is `null` on the wire — never a fabricated `0`.
 > Backtests are **simulated** historical evaluations of the deterministic strategy. No endpoint
 > places, schedules or manages any broker order — the platform is analysis-only.
 
+### Forward testing (Phase 11G §9/§10 — simulated)
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/forwardtests/config/` | Default configuration + valid ranges (symbol, timeframe ∈ {M1,M5,M15,H1}, count 40–20000, sl_pips, tp_pips, max_active_runs). |
+| `POST` | `/api/forwardtests/runs/` | Validate config and create a **simulated** forward test (status `active`). Invalid config → `400`; more than 5 active runs → `429`. Returns `{run}` (**201**). |
+| `GET` | `/api/forwardtests/runs/` | The caller's runs (newest first, max 100): `{count, runs}`. |
+| `GET` | `/api/forwardtests/runs/<uuid>/` | Run detail: status, config, checkpoint (`last_observed_bar`), `observations_count`, `outcomes` breakdown, `data_source`, safe `error`. Owner-only (others → `404`). |
+| `GET` | `/api/forwardtests/runs/<uuid>/observations/` | Recorded decisions (`{count, observations}`): bar time, decision, reason, entry/SL/TP/R, snapshot, `simulated`, outcome (`PENDING`/`WIN`/`LOSS`/`BE`) + outcome R. `?limit=` 1–1000. |
+| `POST` | `/api/forwardtests/runs/<uuid>/observe/` | Run one observation cycle (Celery `heavy` queue; eager in dev/test). Records at most one decision per bar (dedupe), resolves earlier pending outcomes, advances the checkpoint. Non-active run → `409`. Answers **202** with `{run}`. |
+| `POST` | `/api/forwardtests/runs/<uuid>/stop/` | Stop observing an active run (status `stopped`). Answers `{run}`. |
+| `POST` | `/api/forwardtests/observations/<uuid>/journal/` | Create a typed journal entry from an observation (`source="forward_test"`, `source_ref=<observation id>`). Owner-only. Answers **201** `{journal_entry_id, source}`. |
+
+> Forward tests are **simulated** — the deterministic engine is observed on fetched candles and
+> no orders are placed. Every run/observation is labelled `simulated: true`; a metric that cannot
+> be computed is `null`, never invented.
+
 ### WebSocket (Phase 10 — read-only operational status)
 
 | Protocol | Path | Notes |
@@ -188,7 +206,5 @@ cannot support is `null` on the wire — never a fabricated `0`.
 |---|---|
 | `GET/PATCH` `/api/auth/me/profile/` | Update user profile/settings (e.g. `display_timezone`) |
 | Password reset | Not implemented; out of scope for the current phases (audit L-07) |
-| Forward-testing API | Phase 11G §8 forward-testing engine + dashboard (WS4) — not yet implemented |
-| MT5 symbol metadata | Phase 11G §2 symbol-metadata endpoint (WS1) — not yet implemented |
 
 > Each phase updates this file in the same commit as the endpoints it adds.

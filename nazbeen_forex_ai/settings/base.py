@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "nazbeen_forex_ai.risk",
     "nazbeen_forex_ai.backtesting",
     "nazbeen_forex_ai.journal",
+    "nazbeen_forex_ai.forwardtest",
 ]
 
 MIDDLEWARE = [
@@ -156,6 +157,7 @@ CELERY_TASK_QUEUES = {
 }
 CELERY_TASK_ROUTES = {
     "nazbeen_forex_ai.backtesting.*": {"queue": "heavy"},
+    "nazbeen_forex_ai.forwardtest.*": {"queue": "heavy"},
 }
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # fairness for long-running backtests
 

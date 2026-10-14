@@ -52,6 +52,14 @@ historical finding; per-issue verification with test names and live evidence liv
 > the documentation/config errata (**H-10, M-12, M-14, M-16, L-03, L-04, L-06, L-07**). Docker
 > build/compose-run and GitHub-CI execution (**M-11, M-13**) remain **blocked** — there is no
 > Docker host in the development environment — and are recorded honestly rather than claimed.
+>
+> **Phase 11G update (2026-10-14):** **M-11/M-13 partially resolved** — the Docker daemon was
+> started and `docker compose --profile app build` **succeeded** (backend/worker/frontend images,
+> frontend compiling all 16 routes in-container), and the GitHub Actions run for `4ebbc10` was
+> observed as **success** (run #12). A full `docker compose --profile app up` end-to-end run was
+> still **not executed**, so the "deployable stack" claim remains unverified (recorded honestly in
+> `PHASE_11G.md`). No live MT5 terminal or live LLM keys exist in this environment, so those
+> verifications remain **NOT VERIFIED**.
 
 | ID | Status | Notes |
 |---|---|---|
@@ -80,9 +88,9 @@ historical finding; per-issue verification with test names and live evidence liv
 | M-08 | ✅ resolved | No fabricated confidence interval: `[]` whenever uncalibrated (Phase 11C) |
 | M-09 | ✅ resolved | All remaining MASTER_SPEC §3.C detectors implemented (displacement, rejection, engulfing, S/R, S/R flips, premium/discount, sweeps, lifecycle) (Phase 11E) |
 | M-10 | ✅ resolved | `confirmed_at` stamped on FVG/BOS/OB, liquidity (BSL/SSL) and equal-high/low events; swings confirmed at next bar (Phase 11E) |
-| M-11 | ⛔ blocked | Docker stack defects — config review only; **never built/run** (no Docker host). See 11F report. |
+| M-11 | 🟡 partial | Docker stack defects — corrected (`frontend/.dockerignore`), **image build verified** 2026-10-14; full compose **run** still not exercised (Phase 11G). |
 | M-12 | ✅ resolved | `.env.example` now mock-first (`MT5_USE_MOCK=true`); documented (Phase 11F) |
-| M-13 | ⛔ blocked | Container configs never built/run — no Docker host available (Phase 11F, recorded honestly) |
+| M-13 | 🟡 partial | Container configs **built successfully** (Phase 11G, 2026-10-14); a full compose app-profile **run** remains unverified |
 | M-14 | ✅ resolved | `docs/API.md` regenerated against routes: health statuses corrected, login `401`, 11F endpoints documented (Phase 11F) |
 | M-15 | ✅ resolved | Journal spec §3.H fields + full CRUD + performance/export + backtest history (Phase 11F) |
 | M-16 | ✅ resolved | `ROADMAP.md` status table refreshed; README claim corrected (Phase 11F) |
@@ -372,9 +380,9 @@ backtest loop.
 | M-08 | Probability model hardcodes `confidence_interval=[0.3, 0.7]` (a fabricated figure) even though probability itself correctly stays `null`; drift detection missing | `backtesting/probability.py:29-36` | Code read | Return `[]` CI when uncalibrated; implement or document drift detection |
 | M-09 | Spec §3.C: sweeps, equal lows, displacement, FVG mitigation, premium/discount, S/R, S/R flips, rejection candles, engulfing — **9+ of 19 required detectors missing**; equal highs duplicate on runs | `structure/liquidity.py`, `fvg.py`, `orderblocks.py`; no modules for the rest | Grep verification (zero matches) | Implement per PHASE_11_PLAN, or scope-down spec with owner approval |
 | M-10 | Events stamped at their formation bar with no `confirmed_at` — latent repainting for any future consumer (backtest indexes raw list by bar, so no active look-ahead today) | `structure/swings.py`, `fvg.py`, `liquidity.py` | Source trace | Add `confirmed_at` to every event type; stamp at confirmation bar |
-| M-11 | Docker stack defects (static review, **never built**): gunicorn WSGI means `/ws/status/` unreachable in containers; frontend env var `NEXT_PUBLIC_API_URL` vs code's `NEXT_PUBLIC_BACKEND_URL`; default DB creds committed in compose; ports exposed; frontend missing `.dockerignore` entries | `docker-compose.yml`, `Dockerfile`, `frontend/Dockerfile` | Code read | Run on a Docker host (BLOCKED here), fix env/WSGI→daphne-or-drop-WS claim, use `${...}` secrets |
+| M-11 | Docker stack defects (static review, **never built**): gunicorn WSGI means `/ws/status/` unreachable in containers; frontend env var `NEXT_PUBLIC_API_URL` vs code's `NEXT_PUBLIC_BACKEND_URL`; default DB creds committed in compose; ports exposed; frontend missing `.dockerignore` entries | `docker-compose.yml`, `Dockerfile`, `frontend/Dockerfile` | Code read | Run on a Docker host, fix env/WSGI→daphne-or-drop-WS claim, use `${...}` secrets. **Phase 11G: `frontend/.dockerignore` added; `docker compose --profile app build` SUCCEEDED (2026-10-14).** |
 | M-12 | `.env.example` ships `MT5_USE_MOCK=false` (contradicts mock-first docs and feeds CRIT-04); several env vars dead (`MT5_*` retry, `MT5_WORKER_*`), others undocumented | `.env.example:40`, `marketdata/settings.py` | Grep + code read | Default to `true`; remove or wire dead vars; document real ones |
-| M-13 | Container configs written but **never built/run** (no Docker on dev machine) | `Dockerfile*`, `docker-compose.yml` | Environment fact | Verification run on a Docker host before any "deployable" claim |
+| M-13 | Container configs written but **never built/run** | `Dockerfile*`, `docker-compose.yml` | Environment fact | Verification run on a Docker host before any "deployable" claim. **Phase 11G: images BUILT successfully (2026-10-14); full compose app-profile run still not exercised.** |
 | M-14 | `docs/API.md` contract mismatches: health "fail" codes ≠ handler behavior, generic `{"error"}` vs actual detail shapes, "Validates image" false (H-01), `analysis_id` naming | `docs/API.md` vs `urls.py`/views | Route-by-route comparison | Regenerate API.md from routes |
 | M-15 | Journal (spec §3.H) missing: screenshot link, market snapshot, detected structures, model/strategy version, estimated probability; CRUD is create+search only; no performance/export endpoints | `journal/models.py:11-31` | Code read | Phase 11 journal workstream |
 | M-16 | `ROADMAP.md` status table stale; README claims overstated (H-10) | `docs/ROADMAP.md`, `README.md` | Doc comparison | Update in Phase 11 docs pass |

@@ -109,3 +109,12 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def get_tick(self, symbol: str) -> dict[str, Any]:
         ...
+
+    def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Normalized symbol metadata (digits, point, tick size/value, contract size).
+
+        Concrete by default so existing subclasses keep working; providers that
+        cannot supply metadata raise :class:`MarketDataProviderError` and the API
+        answers 503 rather than fabricating values.
+        """
+        raise MarketDataProviderError("symbol metadata is not available from this provider")

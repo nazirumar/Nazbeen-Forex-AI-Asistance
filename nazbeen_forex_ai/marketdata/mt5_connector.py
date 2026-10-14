@@ -251,6 +251,37 @@ class MT5MarketDataProvider(MarketDataProvider):
             )
         return symbols
 
+    def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Real MetaTrader5 symbol metadata (Phase 11G §2).
+
+        Reads ``mt5.symbol_info`` for the resolved (suffix-aware) symbol. When the
+        terminal cannot supply metadata the method raises — the API answers 503
+        rather than inventing digits/point/tick values.
+        """
+        if not self.is_connected():
+            raise MarketDataProviderError("not connected")
+        resolved = self._resolve_symbol(symbol)
+        info = mt5.symbol_info(resolved)
+        if info is None:
+            raise MarketDataProviderError(f"symbol metadata unavailable for {resolved}")
+        return {
+            "symbol": getattr(info, "name", resolved),
+            "description": getattr(info, "description", ""),
+            "digits": getattr(info, "digits", None),
+            "point": getattr(info, "point", None),
+            "tick_size": getattr(info, "trade_tick_size", None),
+            "tick_value": getattr(info, "trade_tick_value", None),
+            "contract_size": getattr(info, "trade_contract_size", None),
+            "spread": getattr(info, "spread", None),
+            "currency_base": getattr(info, "currency_base", ""),
+            "currency_profit": getattr(info, "currency_profit", ""),
+            "volume_min": getattr(info, "volume_min", None),
+            "volume_max": getattr(info, "volume_max", None),
+            "volume_step": getattr(info, "volume_step", None),
+            "trade_mode": getattr(info, "trade_mode", None),
+            "source": "mt5",
+        }
+
     def get_candles(
         self,
         symbol: str,

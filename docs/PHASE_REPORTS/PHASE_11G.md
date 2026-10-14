@@ -176,25 +176,134 @@ real per-run endpoint. No live-execution control exists anywhere. Types extended
 null-metric honesty, failed run, validation error, trade inspection, export endpoint, no
 live-execution buttons).
 
-### 4.4–4.8 Outstanding workstreams
+### 4.4 WS1 — MT5 symbol-metadata endpoint ✅ LANDED
 
-WS1 (MT5 symbol-metadata endpoint), WS4 (forward-testing engine + dashboard + §10 journal source
-discriminator), WS5 (verify §3/§4 regression), WS6 (journal source typing), WS7 (remaining docs +
-live verification) are **not yet implemented**. Backend + frontend suites for the landed work are
-green (see §4.9); the outstanding items are listed honestly rather than claimed.
+`MarketDataProvider.get_symbol_info(symbol)` added as a **concrete** base method that raises
+`MarketDataProviderError` — existing subclasses (including test doubles) keep working, and a provider
+that cannot supply metadata yields **503** rather than a fabricated digits/point/tick value.
+`MockMarketDataProvider.get_symbol_info` returns internally consistent values explicitly labelled
+`source: mock`; `MT5MarketDataProvider.get_symbol_info` reads real `mt5.symbol_info` (digits, point,
+tick size/value, contract size, spread, base/profit currency, volume min/max/step, trade mode) and
+labels `source: mt5`.
+
+**Endpoint:** `GET /api/mt5/symbol-info/?symbol=…` (authenticated) — strict symbol validation → 400,
+provider failure → 503 (generic), unexpected → 500.
+
+**Tests:** `marketdata/tests/test_symbol_info_api.py` — **5 tests** (auth required, labelled mock
+metadata, invalid-symbol 400, provider-without-metadata 503, mock consistency).
+
+### 4.5 WS4 — Simulated forward-testing engine + dashboard ✅ LANDED
+
+**App** `nazbeen_forex_ai.forwardtest` (new, registered in `INSTALLED_APPS`, root URLs, Celery
+`heavy` queue).
+- **Models** (migration `0001_initial`): `ForwardTestRun` (symbol, timeframe, config snapshot,
+  status active/stopped/failed, `data_source`, strategy version, checkpoint `last_observed_bar` /
+  `last_observed_at`, `observations_count`, safe `error`) and `ForwardTestObservation` (decision,
+  reason, entry/sl/tp/rr, snapshot, `simulated=True`, outcome PENDING/WIN/LOSS/BE, outcome price/R,
+  resolved_at) with a `(run, bar_time)` **unique constraint** for dedupe.
+- **Services** (`forwardtest/services.py`): strict `validate_config`; `observe_run` fetches candles
+  via the shared provider path, evaluates the Phase 11E deterministic engine on the closed window
+  (no look-ahead — only bars up to and including the observed bar), records levels from the config's
+  SL/TP, checkpoints the run, dedupes per bar, and resolves earlier PENDING observations from later
+  bars (**stop-loss first** on a bar that touches both). Every run/observation is labelled
+  **simulated**. No order-execution code exists.
+- **Task** (`forwardtest/tasks.py`): `observe_run_task` on the `heavy` queue (eager in dev/test);
+  captures failures on the run (status `failed` + safe error).
+- **Endpoints:** `POST/GET /api/forwardtests/runs/`, `GET …/<uuid>/`, `…/observations/`,
+  `POST …/<uuid>/observe/`, `POST …/<uuid>/stop/`,
+  `POST /api/forwardtests/observations/<uuid>/journal/`, `GET /api/forwardtests/config/`.
+  All authenticated, owner-scoped (cross-user → 404), active-run cap 5 → 429, validation → 400.
+- **§10 journal linkage:** `journalize_observation` creates a typed journal row
+  (`source="forward_test"`, `source_ref=<observation id>`, tags `[forward_test, simulated]`) — never
+  claiming a real trade.
+
+**Tests:** `forwardtest/tests/test_forwardtest_api_11g.py` — **25 tests** (config validation,
+deterministic levels, observation creation, per-bar idempotence, outcome tracking, stop-first
+resolution, Celery failure capture, journal typing + cross-user rejection, auth, create/list/detail,
+isolation, observe/stop/conflict, config, active-run cap).
+
+### 4.6 WS5 — §3 / §4 regression verification ✅ LANDED
+
+`analysis/tests/test_phase_11g_invariants.py` — **10 tests** pinning the cross-cutting invariants:
+MTF reads are deterministic from confirmed swings; real conflicts surface; an unavailable timeframe
+is `null` (never NEUTRAL); an AI bullish reading cannot override a deterministic WAIT; a
+deterministic BUY is retained when the AI disagrees; unsynchronized data forces WAIT with an
+explanation; mock and stale data are never synchronized; fresh MT5 data is.
+
+### 4.7 WS6 — Journal source typing ✅ LANDED
+
+`JournalEntry` gained `source` (manual/screenshot_analysis/backtest/forward_test, default `manual`)
+and `source_ref` (opaque origin id) additively; migration
+`journal/0003_journalentry_source_journalentry_source_ref.py`. The service validates `source`,
+defaults a linked screenshot analysis to `source="screenshot_analysis"`, filters by `source`, and
+includes both fields in the serializer, list/search and CSV/JSON export.
+
+**Tests:** `journal/tests/test_journal_source_11g.py` — **5 tests** (default manual, typed create,
+invalid rejected, list filter, export includes source).
+
+### 4.8 WS7 — Docs + live verification ✅ LANDED
+
+- This report updated (§4.4–4.8, §4.9, §5, §6); `docs/PROJECT_PROGRESS.md`, `docs/API.md`,
+  `docs/DECISIONS.md` (ADR-015) updated.
+- **Live MT5:** NOT VERIFIED — no MetaTrader5 terminal is available in this environment. All MT5
+  paths are exercised through the labelled mock provider only; real-terminal behaviour is owner-manual.
+- **Live LLM:** NOT VERIFIED — no provider API keys are configured here; the mock providers are used.
+  Real provider calls are owner-manual.
 
 ### 4.9 Verification table
 
 | Check | Command | Result |
 |---|---|---|
-| Django check | `uv run python manage.py check` | **clean** (fresh run 2026-10-14, WS2) |
-| Migrations | `uv run python manage.py makemigrations --check --dry-run` | **No changes detected** (WS2) |
-| Backend tests | `uv run pytest` | **423 passed, 0 failed** (WS2: 394 baseline + 29 new) |
-| Frontend tests | `npx vitest run` | **132 passed / 14 files** (11F baseline: 111/11) |
-| Frontend types | `npm run typecheck` | **exit 0** (WS3) |
-| Frontend build | `npm run build` | **exit 0 — 15 routes** |
+| Django check | `uv run python manage.py check` | **clean** (2026-10-14) |
+| Migrations | `uv run python manage.py makemigrations --check --dry-run` | **No changes detected** |
+| Backend tests | `uv run pytest` | **468 passed, 0 failed** (423 + WS1 5 + WS4 25 + WS5 10 + WS6 5) |
+| Frontend tests | `npx vitest run --no-file-parallelism` | **140 passed / 15 files** (132 + WS4 console 8) |
+| Frontend types | `npm run typecheck` | **exit 0** |
+| Frontend build | `npm run build` | **exit 0 — 15 → 16 routes** (added `/dashboard/forward`) |
 | Docker build | `docker compose --profile app build` | **built** (backend/worker/frontend) |
-| GitHub CI | Actions run for `4ebbc10` | **success** (run #12) |
+| GitHub CI | Actions run for `4ebbc10` (last pushed) | **success** (run #12) |
+| Live MT5 terminal | manual, owner host | **NOT VERIFIED** (no terminal here) |
+| Live LLM providers | manual, owner host | **NOT VERIFIED** (no keys here) |
 
 > Frontend vitest on Windows occasionally fails to spawn a worker (the workspace path contains
-> spaces); a re-run is clean. The clean run above is 14 files / 132 tests.
+> spaces); run with `--no-file-parallelism` or re-run. The clean run above is 15 files / 140 tests.
+
+---
+
+## 5. Deliverables (10)
+
+1. **Files changed/added** — backend: `marketdata/{providers,mock,mt5_connector,views,urls}.py`;
+   `journal/{models,services,views}.py` + migration `0003`; `analysis/tests/test_phase_11g_invariants.py`;
+   `backtesting/*` (WS2/WS3, prior increment); new app `forwardtest/` (models, services, tasks, views,
+   urls, admin, apps, migration `0001`, tests). Frontend: `components/forwardtests/forwardtest-console.tsx`,
+   `app/dashboard/forward/page.tsx`, `components/layout/sidebar.tsx`, `lib/types.ts`,
+   `test/{helpers,shell,forwardtest-console}.*`. Settings/root URLS updated.
+2. **Migrations** — `backtesting/0003_…`, `journal/0003_journalentry_source_journalentry_source_ref.py`,
+   `forwardtest/0001_initial.py`. `makemigrations --check` clean.
+3. **Endpoints** — `GET /api/mt5/symbol-info/`; forward-testing surface (§4.5); plus the WS2
+   backtest surface. All authenticated + owner-scoped.
+4. **Frontend** — `/dashboard/forward` console (start/observe/stop, observations table, typed
+   journal action), sidebar entry, additive types + fixtures.
+5. **Backend test results** — `uv run pytest` → **468 passed, 0 failed** (was 423).
+6. **Frontend test results** — `npx vitest run --no-file-parallelism` → **140 passed / 15 files**
+   (was 132/14); `npm run typecheck` exit 0; `npm run build` exit 0.
+7. **Live MT5 status** — **NOT VERIFIED** (no terminal in this environment).
+8. **Live LLM status** — **NOT VERIFIED** (no provider keys in this environment).
+9. **Unresolved issues** — live MT5/LLM verification (owner-manual); scheduled/automatic forward-test
+   observation (a Celery beat schedule) is not configured — observation is manual via the endpoint;
+   Docker compose full-run of the app profile is not re-executed this increment.
+10. **Recommended Phase 11H plan** — see §6.
+
+## 6. Recommended Phase 11H plan
+
+1. Optional Celery-beat schedule for active forward tests (periodic `observe_run_task`) with a
+   per-run interval and rate limiting.
+2. Live-verification harness: a documented, owner-run checklist for MT5 symbol-info + candle sync
+   and real LLM providers, recording results back into the docs.
+3. Forward-test aggregate analytics (per-source journal performance split by `source`, sample sizes,
+   `null` when not computable) reusing the 11G metrics conventions.
+4. Re-run `docker compose --profile app up` end-to-end and record it.
+5. Address the outstanding Dependabot findings if in scope.
+
+Owner approval is required before starting Phase 11H.
+

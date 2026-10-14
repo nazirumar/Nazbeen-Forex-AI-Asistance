@@ -41,6 +41,7 @@ _JSON_FIELDS = (
 )
 
 _OUTCOMES = tuple(choice for choice, _ in JournalEntry.OUTCOME_CHOICES)
+_SOURCES = tuple(choice for choice, _ in JournalEntry.SOURCE_CHOICES)
 
 # CSV/JSON export column order.
 EXPORT_FIELDS = (
@@ -48,6 +49,8 @@ EXPORT_FIELDS = (
     "created_at",
     "symbol",
     "timeframe",
+    "source",
+    "source_ref",
     "analysis_timestamp",
     "scenario_decision",
     "entry",
@@ -135,6 +138,7 @@ class JournalService:
         query: str | None = None,
         symbol: str | None = None,
         outcome: str | None = None,
+        source: str | None = None,
         limit: int = 50,
     ) -> List[JournalEntry]:
         qs = JournalEntry.objects.filter(user=user)
@@ -144,6 +148,8 @@ class JournalService:
             qs = qs.filter(symbol__iexact=symbol)
         if outcome:
             qs = qs.filter(outcome=outcome)
+        if source:
+            qs = qs.filter(source=source)
         return list(qs[: max(1, min(int(limit), 200))])
 
     def list_entries(self, user) -> List[JournalEntry]:
@@ -186,6 +192,15 @@ class JournalService:
                 raise ValidationError("outcome must be one of " + ", ".join(_OUTCOMES))
             fields["outcome"] = outcome
 
+        if "source" in data:
+            source = data.get("source") or "manual"
+            if source not in _SOURCES:
+                raise ValidationError("source must be one of " + ", ".join(_SOURCES))
+            fields["source"] = source
+
+        if "source_ref" in data:
+            fields["source_ref"] = data.get("source_ref") or ""
+
         for name in _NULLABLE_TEXT:
             if name in data:
                 value = data.get(name)
@@ -222,12 +237,18 @@ class JournalService:
             else:
                 fields["analysis_session_id"] = _parse_uuid(data.get("analysis_session_id"))
 
+        # A linked analysis implies screenshot_analysis origin unless stated.
+        if fields.get("screenshot_analysis") is not None and "source" not in data:
+            fields["source"] = "screenshot_analysis"
+
         return fields
 
     def _create_defaults(self) -> Dict[str, Any]:
         return {
             "symbol": None,
             "timeframe": None,
+            "source": "manual",
+            "source_ref": "",
             "scenario_decision": None,
             "model_version": "",
             "strategy_version": "",
@@ -355,6 +376,8 @@ class JournalService:
             "created_at": iso(entry.created_at),
             "symbol": entry.symbol,
             "timeframe": entry.timeframe,
+            "source": entry.source,
+            "source_ref": entry.source_ref,
             "analysis_timestamp": iso(entry.analysis_timestamp),
             "scenario_decision": entry.scenario_decision,
             "entry": entry.entry,

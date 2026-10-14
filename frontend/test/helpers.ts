@@ -68,6 +68,8 @@ import type {
   BacktestTrade,
   CandlesResponse,
   EquityPoint,
+  ForwardTestObservation,
+  ForwardTestRun,
   JournalEntry,
   JournalPerformance,
   Me,
@@ -356,6 +358,54 @@ export function backtestMetricsFixture(over: Partial<BacktestMetrics> = {}): Bac
       pip_size: 0.0001,
     },
     is_walk_forward: false,
+    ...over,
+  };
+}
+
+export function forwardTestRunFixture(over: Partial<ForwardTestRun> = {}): ForwardTestRun {
+  return {
+    id: "77777777-7777-7777-7777-777777777777",
+    symbol: "EURUSD",
+    timeframe: "M15",
+    status: "active",
+    config: { symbol: "EURUSD", timeframe: "M15", count: 300 },
+    strategy_version: "phase11e-primary-model",
+    data_source: "mock",
+    last_observed_bar: "2026-01-01T12:00:00Z",
+    last_observed_at: "2026-01-01T12:00:05Z",
+    observations_count: 2,
+    outcomes: { PENDING: 1, WIN: 1, LOSS: 0, BE: 0 },
+    error: null,
+    note: "Simulated forward test (analysis-only); no orders are placed.",
+    simulated: true,
+    created_at: "2026-01-01T11:00:00Z",
+    started_at: "2026-01-01T11:00:00Z",
+    stopped_at: null,
+    ...over,
+  };
+}
+
+export function forwardTestObservationFixture(
+  over: Partial<ForwardTestObservation> = {},
+): ForwardTestObservation {
+  return {
+    id: "88888888-8888-8888-8888-888888888888",
+    run_id: "77777777-7777-7777-7777-777777777777",
+    bar_time: "2026-01-01T12:00:00Z",
+    decision: "BUY",
+    reason: "Deterministic BUY on closed window; simulated entry requires no confirmation from AI.",
+    entry: 1.1,
+    sl: 1.099,
+    tp: 1.102,
+    rr: 2.0,
+    snapshot: { bias: { M15: "BULLISH" }, conflicts: [], price: 1.1, simulated: true },
+    data_source: "mock",
+    simulated: true,
+    outcome: "WIN",
+    outcome_price: 1.102,
+    outcome_r: 2.0,
+    resolved_at: "2026-01-01T12:15:00Z",
+    created_at: "2026-01-01T12:00:05Z",
     ...over,
   };
 }

@@ -49,6 +49,32 @@ class MockMarketDataProvider(MarketDataProvider):
             symbols = [x for x in symbols if s in x["symbol"]]
         return symbols
 
+    def get_symbol_info(self, symbol: str) -> dict[str, Any]:
+        """Synthetic symbol metadata, explicitly labelled ``source: mock``.
+
+        Values are internally consistent and clearly marked as mock — they are
+        never presented as live broker metadata.
+        """
+        if not self._connected:
+            raise MarketDataProviderError("not connected")
+        s = (symbol or "").upper()
+        return {
+            "symbol": s,
+            "description": f"{s} (MOCK)",
+            "digits": 5,
+            "point": 0.00001,
+            "tick_size": 0.00001,
+            "tick_value": 1.0,
+            "contract_size": 100000.0,
+            "spread": 2,
+            "currency_base": s[:3],
+            "currency_profit": s[3:] or "USD",
+            "volume_min": 0.01,
+            "volume_max": 100.0,
+            "volume_step": 0.01,
+            "source": "mock",
+        }
+
     def _base_price(self) -> float:
         return 1.1050
 

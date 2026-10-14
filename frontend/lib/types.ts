@@ -404,6 +404,69 @@ export interface BacktestMetricsResponse {
   status: string;
 }
 
+/* ----------------------------------------------------------- forwardtests --- */
+
+export type ForwardTestStatus = "active" | "stopped" | "failed";
+export type ForwardDecision = "BUY" | "SELL" | "WAIT";
+export type ForwardOutcome = "PENDING" | "WIN" | "LOSS" | "BE";
+
+/** A simulated forward test (`GET /api/forwardtests/runs/`, Phase 11G §9). */
+export interface ForwardTestRun {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  status: ForwardTestStatus;
+  config: Record<string, unknown>;
+  strategy_version?: string;
+  data_source?: string | null;
+  last_observed_bar?: string | null;
+  last_observed_at?: string | null;
+  observations_count: number;
+  outcomes: Record<string, number>;
+  error?: string | null;
+  note?: string | null;
+  /** Forward-test results are always simulated (never real order outcomes). */
+  simulated: boolean;
+  created_at: string | null;
+  started_at?: string | null;
+  stopped_at?: string | null;
+}
+
+export interface ForwardTestRunsResponse {
+  count: number;
+  runs: ForwardTestRun[];
+}
+
+export interface ForwardTestRunResponse {
+  run: ForwardTestRun;
+}
+
+/** One recorded decision (`GET /api/forwardtests/runs/<id>/observations/`). */
+export interface ForwardTestObservation {
+  id: string;
+  run_id: string;
+  bar_time: string | null;
+  decision: ForwardDecision;
+  reason: string;
+  entry: number | null;
+  sl: number | null;
+  tp: number | null;
+  rr: number | null;
+  snapshot: Record<string, unknown>;
+  data_source?: string | null;
+  simulated: boolean;
+  outcome: ForwardOutcome;
+  outcome_price: number | null;
+  outcome_r: number | null;
+  resolved_at: string | null;
+  created_at: string | null;
+}
+
+export interface ForwardTestObservationsResponse {
+  count: number;
+  observations: ForwardTestObservation[];
+}
+
 /* ------------------------------------------------------------- analytics --- */
 
 /** Recorded-only journal performance (`GET /api/journal/performance/`). */

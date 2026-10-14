@@ -41,6 +41,8 @@ def serialize_entry(entry: JournalEntry) -> dict[str, Any]:
         "id": str(entry.id),
         "symbol": entry.symbol,
         "timeframe": entry.timeframe,
+        "source": entry.source,
+        "source_ref": entry.source_ref,
         "analysis_session_id": str(entry.analysis_session_id) if entry.analysis_session_id else None,
         "screenshot_analysis_id": str(entry.screenshot_analysis_id) if entry.screenshot_analysis_id else None,
         "analysis_timestamp": _iso(entry.analysis_timestamp),
@@ -98,6 +100,7 @@ class JournalEntryView(APIView):
             query=request.query_params.get("q"),
             symbol=request.query_params.get("symbol"),
             outcome=request.query_params.get("outcome"),
+            source=request.query_params.get("source"),
             limit=limit,
         )
         return Response(

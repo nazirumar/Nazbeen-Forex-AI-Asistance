@@ -7,11 +7,12 @@
  * attached through the primitive, and only computed levels drawn as lines.
  */
 
-import { render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TradingChart } from "@/components/chart/trading-chart";
 import { ZonesPrimitive } from "@/components/chart/zone-primitive";
 import { toUtcSeconds } from "@/lib/chart-data";
+import { formatPrice } from "@/lib/format";
 import type { CandlePoint, SetupResult, StructureEvent, TradePlan } from "@/lib/types";
 import { candlePoint } from "./helpers";
 
@@ -22,7 +23,10 @@ const m = vi.hoisted(() => {
   const removePriceLine = vi.fn();
   const attachPrimitive = vi.fn();
   const fitContent = vi.fn();
+  const scrollToRealTime = vi.fn();
   const applyOptions = vi.fn();
+  const subscribeCrosshairMove = vi.fn();
+  const unsubscribeCrosshairMove = vi.fn();
   const chartRemove = vi.fn();
   const series = {
     setData,
@@ -34,9 +38,11 @@ const m = vi.hoisted(() => {
   };
   const chart = {
     addSeries: vi.fn(() => series),
-    timeScale: vi.fn(() => ({ fitContent, timeToCoordinate: () => null })),
+    timeScale: vi.fn(() => ({ fitContent, timeToCoordinate: () => null, scrollToRealTime })),
     remove: chartRemove,
     applyOptions,
+    subscribeCrosshairMove,
+    unsubscribeCrosshairMove,
   };
   return {
     setData,
@@ -45,7 +51,10 @@ const m = vi.hoisted(() => {
     removePriceLine,
     attachPrimitive,
     fitContent,
+    scrollToRealTime,
     applyOptions,
+    subscribeCrosshairMove,
+    unsubscribeCrosshairMove,
     chartRemove,
     chart,
     series,
@@ -228,6 +237,35 @@ describe("TradingChart", () => {
     const { rerender } = render(<TradingChart candles={CANDLES} />);
     rerender(<TradingChart candles={[...CANDLES, candlePoint(5)]} />);
     expect(m.fitContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders an OHLC legend for the last bar and follows the crosshair", () => {
+    render(<TradingChart candles={CANDLES} symbol="EURUSD" timeframe="M15" />);
+    const last = candlePoint(2); // latest bar once CANDLES is sorted
+    const legend = screen.getByTestId("chart-legend");
+    expect(legend.textContent).toContain("EURUSD");
+    expect(legend.textContent).toContain("M15");
+    expect(legend.textContent).toContain(formatPrice(last.open));
+    expect(legend.textContent).toContain(formatPrice(last.close));
+
+    // Crosshair over an older bar → the legend follows it.
+    const handler = m.subscribeCrosshairMove.mock.calls[0][0] as (p: { time?: number }) => void;
+    const first = candlePoint(0);
+    act(() => handler({ time: toUtcSeconds(first.time) as number }));
+    expect(screen.getByTestId("chart-legend").textContent).toContain(formatPrice(first.close));
+
+    // Crosshair leaves the bars → fall back to the last bar.
+    act(() => handler({ time: undefined }));
+    expect(screen.getByTestId("chart-legend").textContent).toContain(formatPrice(last.close));
+  });
+
+  it("offers Fit and Latest view controls", () => {
+    render(<TradingChart candles={CANDLES} />);
+    m.fitContent.mockClear();
+    fireEvent.click(screen.getByTestId("chart-fit"));
+    expect(m.fitContent).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId("chart-latest"));
+    expect(m.scrollToRealTime).toHaveBeenCalledTimes(1);
   });
 });
 

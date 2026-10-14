@@ -290,3 +290,135 @@ export interface JournalEntry {
   notes: string;
   created_at: string;
 }
+
+/* ------------------------------------------------------------- backtests --- */
+
+/** A recorded backtest run (`GET /api/backtests/`, Phase 11F). */
+export interface BacktestRun {
+  id: string;
+  symbol: string | null;
+  timeframe: string | null;
+  total_trades: number;
+  win_rate: number | null;
+  profit_factor: number | null;
+  expectancy: number | null;
+  max_drawdown: number | null;
+  net_profit: number | null;
+  metrics: Record<string, unknown>;
+  created_at: string | null;
+  /* --- Phase 11G execution/reporting fields (additive) --- */
+  status?: "queued" | "running" | "completed" | "failed";
+  error?: string | null;
+  config?: Record<string, unknown>;
+  strategy_version?: string;
+  is_walk_forward?: boolean;
+  note?: string | null;
+  data_source?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+export interface BacktestRunsResponse {
+  count: number;
+  runs: BacktestRun[];
+}
+
+export interface BacktestRunResponse {
+  run: BacktestRun;
+}
+
+/** One simulated trade (`GET /api/backtests/runs/<id>/trades/`). */
+export interface BacktestTrade {
+  id: string;
+  index: number;
+  side: "LONG" | "SHORT";
+  entry_time: string | null;
+  exit_time: string | null;
+  entry: number;
+  exit_price: number | null;
+  sl: number;
+  tp: number;
+  lots: number;
+  result: "WIN" | "LOSS" | "BREAK_EVEN";
+  pnl: number;
+  realized_r: number | null;
+  duration_seconds: number | null;
+  exit_reason: string;
+  session: string;
+  weekday: string;
+}
+
+export interface BacktestTradesResponse {
+  count: number;
+  trades: BacktestTrade[];
+}
+
+export interface EquityPoint {
+  time: string | null;
+  equity: number;
+  balance: number;
+  drawdown: number;
+}
+
+export interface EquityResponse {
+  points: EquityPoint[];
+}
+
+/** §6 metrics (`GET /api/backtests/runs/<id>/metrics/`). null = not computable. */
+export interface BacktestMetrics {
+  sample_size: number;
+  total_trades: number;
+  wins: number;
+  losses: number;
+  break_evens: number;
+  win_rate: number | null;
+  average_realized_r: number | null;
+  gross_profit: number;
+  gross_loss: number;
+  net_profit: number;
+  profit_factor: number | null;
+  profit_factor_note?: string;
+  expectancy: number | null;
+  max_drawdown: number;
+  max_drawdown_pct: number | null;
+  average_trade_duration_seconds: number | null;
+  max_consecutive_wins: number;
+  max_consecutive_losses: number;
+  by_session?: Record<string, BacktestGroupStats>;
+  by_weekday?: Record<string, BacktestGroupStats>;
+  by_setup_type?: Record<string, BacktestGroupStats>;
+  assumptions?: Record<string, number | null>;
+  is_walk_forward?: boolean;
+}
+
+export interface BacktestGroupStats {
+  trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number | null;
+  net_profit: number;
+}
+
+export interface BacktestMetricsResponse {
+  metrics: BacktestMetrics;
+  status: string;
+}
+
+/* ------------------------------------------------------------- analytics --- */
+
+/** Recorded-only journal performance (`GET /api/journal/performance/`). */
+export interface JournalPerformance {
+  total_entries: number;
+  outcomes: Record<string, number>;
+  closed: number;
+  open: number;
+  win_rate: number | null;
+  average_rr: number | null;
+  total_pnl: number | null;
+  expectancy: number | null;
+  profit_factor: number | null;
+  max_drawdown: number | null;
+  pnl_sample: number;
+  rr_sample: number;
+  note: string;
+}

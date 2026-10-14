@@ -5,14 +5,26 @@
 
 ## Current phase
 
-**Phase 11F - Journal, Analytics & Reporting + Infra Verification & Doc Errata** - implemented
-2026-10-14 - **awaiting owner approval before Phase 11G**
+**Phase 11G - Real MT5 Integration, Advanced Backtesting, AI Analysis Validation & Demo Forward
+Testing** - **IN PROGRESS** (2026-10-14). WS2 (backtest execution + reporting API) and WS3
+(backtesting dashboard) are implemented, tested and green; WS1/WS4/WS5/WS6/WS7 remain outstanding.
 
-> Phase 11F closes WS-E (journal spec §3.H fields, full CRUD, performance/export, read-only
+> 11G is a large phase and is being delivered in reviewable increments. Landed so far: a full
+> simulated-backtest execution/reporting API (`/api/backtests/runs/…` create/list/detail/trades/
+> metrics/equity/export + `/api/backtests/config/`), `BacktestTrade` persistence, additive
+> `BacktestRun` fields, Celery execution with failure capture, additive engine portfolio stops
+> (max daily loss / max drawdown), `walk_forward(**run_kwargs)`, and the `/dashboard/backtests`
+> console. Backend **423 passed**; frontend **132 passed / 14 files**; `tsc`/`next build` clean.
+> Remaining (see `docs/PHASE_REPORTS/PHASE_11G.md` §4.4): MT5 symbol-metadata endpoint (WS1),
+> forward-testing engine + dashboard + journal source discriminator (WS4/§10), §3/§4 regression
+> verification (WS5), journal source typing (WS6), remaining docs + live MT5/LLM verification (WS7).
+> No live MT5/LLM verification has been performed from this environment.
+
+> Phase 11F closed WS-E (journal spec §3.H fields, full CRUD, performance/export, read-only
 > owner-scoped backtest history - audit M-15/P2.5) and WS-F (doc/config errata - H-10, M-12,
-> M-14, M-16, L-03, L-04, L-06, L-07). Docker build/run and GitHub-CI execution (M-11, M-13)
-> remain **blocked** (no Docker host here) and are recorded honestly. Phase 11E (advanced
-> ICT/SMC intelligence + LangGraph) completed 2026-10-14 - see `docs/PHASE_REPORTS/PHASE_11E.md`.
+> M-14, M-16, L-03, L-04, L-06, L-07). Docker build now **succeeds** (verified 2026-10-14);
+> GitHub CI for `4ebbc10` is **green** (run #12). Phase 11E (advanced ICT/SMC intelligence +
+> LangGraph) completed 2026-10-14 - see `docs/PHASE_REPORTS/PHASE_11E.md`.
 
 ## Completed phases
 
@@ -34,6 +46,7 @@
 | 11D | Professional Trading Dashboard (frontend + supporting endpoints) | `docs/PHASE_REPORTS/PHASE_11D.md` | 2026-10-10 |
 | 11E | Advanced ICT/SMC Intelligence and LangGraph (WS-D) | `docs/PHASE_REPORTS/PHASE_11E.md` | 2026-10-14 |
 | 11F | Journal, Analytics & Reporting + Infra Verification & Doc Errata (WS-E/WS-F) | `docs/PHASE_REPORTS/PHASE_11F.md` | 2026-10-14 |
+| 11G | Real MT5 Integration, Advanced Backtesting, AI Analysis Validation & Demo Forward Testing | `docs/PHASE_REPORTS/PHASE_11G.md` | **IN PROGRESS** (WS2/WS3 done) |
 
 ## Completed features
 
@@ -109,9 +122,9 @@
 ## Known issues
 
 - PostgreSQL support configured via `DATABASE_URL` but not yet tested against a live server.
-- Docker stack (backend/worker/frontend images) written but never built — no Docker on the dev machine.
+- Docker stack (backend/worker/frontend images) **builds successfully** — `docker compose --profile app build` verified 2026-10-14. A full compose **run** of the app profile has not been exercised here.
 - Redis channel layer (`USE_REDIS_CHANNELS=true`) configured but only the in-memory layer is tested.
-- CI workflow not yet executed on GitHub (runs locally-verified commands).
+- GitHub Actions CI workflow **executed**: run #12 for `4ebbc10` → `conclusion: success` (2026-10-14).
 - MT5 suffix handling, staleness and the weekend market-closure heuristic (Phase 11C) are verified against a mocked connector only; live-broker symbol naming and holiday calendars remain manual/local verification. `MEDIA_ROOT` serving for production (reverse proxy) is not wired — the screenshot API streams files itself.
 
 - Real-provider LLM behavior is verified only for Google Gemini (`gemini-3.8-flash`, live-tested 2026-10-09); OpenAI adapter paths remain unit-tested only. Google retires models without notice (`gemini-2.5-flash` now → HTTP 404) — keep `*_LLM_MODEL` current.
@@ -123,11 +136,11 @@
 
 - Live LLM verification (Phase 11B, 2026-10-09): real Gemini reasoning + vision HTTP 200 via `manage.py llm_smoke`; end-to-end `analyze()` with real MT5 data → deterministic SELL retained over a bullish LLM reading (disagreement recorded, `resolved=True`); transient Google 503s surfaced loudly in `errors`, never mocked.
 
-- `uv run pytest` → **394 passed, 0 failed, 0 skipped** (2026-10-14, Phase 11F; 361 at 11E; hermetic mock-only)
+- `uv run pytest` → **423 passed, 0 failed, 0 skipped** (2026-10-14, Phase 11G WS2; 394 at 11F; hermetic mock-only)
 - `uv run pytest docs/audits/repro` → **15 passed** (audit repro index, all remediated; 11C repaired two out-of-order fixture generators, no assertions changed)
-- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-14, Phase 11F)
-- Frontend `npm test` (vitest) → **111 passed, 0 failed**, 11 files (2026-10-14, Phase 11E; unchanged in 11F)
-- Frontend `tsc --noEmit` → 0 errors; `next build` → clean, all 11 routes compiled + prerendered (2026-10-14, Phase 11E)
+- `manage.py check` → clean; `makemigrations --check --dry-run` → no pending migrations (2026-10-14, Phase 11G WS2)
+- Frontend `npm test` (vitest) → **132 passed, 0 failed**, 14 files (2026-10-14, Phase 11G WS3; 111/11 at 11E)
+- Frontend `tsc --noEmit` → 0 errors; `next build` → clean, all 15 routes compiled + prerendered (2026-10-14, Phase 11G)
 - Live smoke test: `GET /api/health/` → `200 OK` on runserver (2026-10-08)
 - Live MT5 timestamp check (11A.5): auto-measured server offset +3.0002 h; candles normalized
   to UTC in the past; zero future timestamps (2026-10-09, MetaQuotes-Demo, local machine)

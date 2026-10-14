@@ -63,8 +63,14 @@ export const ISO_B = "2026-01-01T00:30:00Z";
 import type {
   AnalysisResult,
   AnalysisSummary,
+  BacktestMetrics,
+  BacktestRun,
+  BacktestTrade,
   CandlesResponse,
+  EquityPoint,
   JournalEntry,
+  JournalPerformance,
+  Me,
   Mt5Status,
   MtfAlignment,
   SetupResult,
@@ -262,6 +268,132 @@ export function analysisSummaryFixture(over: Partial<AnalysisSummary> = {}): Ana
     summary: "No confirmed setup.",
     data_source: "mock",
     screenshot_stored: true,
+    ...over,
+  };
+}
+
+export function backtestRunFixture(over: Partial<BacktestRun> = {}): BacktestRun {
+  return {
+    id: "55555555-5555-5555-5555-555555555555",
+    symbol: "EURUSD",
+    timeframe: "M15",
+    total_trades: 42,
+    win_rate: 0.5238,
+    profit_factor: 1.35,
+    expectancy: 12.5,
+    max_drawdown: 88.2,
+    net_profit: 525.0,
+    metrics: {},
+    created_at: "2026-10-09T12:00:00Z",
+    status: "completed",
+    error: null,
+    config: {},
+    strategy_version: "phase11e-primary-model",
+    is_walk_forward: false,
+    note: null,
+    data_source: "mock",
+    started_at: "2026-10-09T12:00:00Z",
+    finished_at: "2026-10-09T12:00:05Z",
+    ...over,
+  };
+}
+
+export function backtestTradeFixture(over: Partial<BacktestTrade> = {}): BacktestTrade {
+  return {
+    id: "66666666-6666-6666-6666-666666666666",
+    index: 0,
+    side: "LONG",
+    entry_time: "2026-01-01T08:00:00Z",
+    exit_time: "2026-01-01T09:00:00Z",
+    entry: 1.1,
+    exit_price: 1.102,
+    sl: 1.099,
+    tp: 1.102,
+    lots: 1.0,
+    result: "WIN",
+    pnl: 200.0,
+    realized_r: 2.0,
+    duration_seconds: 3600,
+    exit_reason: "take_profit",
+    session: "london",
+    weekday: "Thursday",
+    ...over,
+  };
+}
+
+export function backtestMetricsFixture(over: Partial<BacktestMetrics> = {}): BacktestMetrics {
+  return {
+    sample_size: 2,
+    total_trades: 2,
+    wins: 1,
+    losses: 1,
+    break_evens: 0,
+    win_rate: 0.5,
+    average_realized_r: 0.5,
+    gross_profit: 200.0,
+    gross_loss: 100.0,
+    net_profit: 100.0,
+    profit_factor: 2.0,
+    expectancy: 50.0,
+    max_drawdown: 100.0,
+    max_drawdown_pct: 1.0,
+    average_trade_duration_seconds: 3600,
+    max_consecutive_wins: 1,
+    max_consecutive_losses: 1,
+    by_session: {},
+    by_weekday: {},
+    by_setup_type: {},
+    assumptions: {
+      spread_pips: 1,
+      commission_pips: 0.5,
+      slippage_pips: 0.5,
+      sl_pips: 10,
+      tp_pips: 20,
+      initial_balance: 10000,
+      risk_pct: 1,
+      lots: 1,
+      contract_size: 100000,
+      pip_size: 0.0001,
+    },
+    is_walk_forward: false,
+    ...over,
+  };
+}
+
+export function equityPointsFixture(): EquityPoint[] {
+  return [
+    { time: "2026-01-01T08:00:00Z", equity: 10000, balance: 10000, drawdown: 0 },
+    { time: "2026-01-01T09:00:00Z", equity: 10200, balance: 10200, drawdown: 0 },
+    { time: "2026-01-01T10:00:00Z", equity: 10100, balance: 10100, drawdown: 100 },
+  ];
+}
+
+export function journalPerformanceFixture(over: Partial<JournalPerformance> = {}): JournalPerformance {
+  return {
+    total_entries: 6,
+    outcomes: { WIN: 3, LOSS: 2, BE: 1, PENDING: 0 },
+    closed: 6,
+    open: 0,
+    win_rate: 0.6,
+    average_rr: 2.1,
+    total_pnl: 340.0,
+    expectancy: 56.67,
+    profit_factor: 1.8,
+    max_drawdown: 120.0,
+    pnl_sample: 6,
+    rr_sample: 4,
+    note: "Computed only from recorded journal fields. null means the data required for that statistic was not recorded.",
+    ...over,
+  };
+}
+
+export function meFixture(over: Partial<Me> = {}): Me {
+  return {
+    id: 7,
+    username: "naz",
+    email: "naz@example.com",
+    date_joined: "2026-10-01T08:30:00Z",
+    profile: { display_timezone: "UTC" },
     ...over,
   };
 }

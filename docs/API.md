@@ -155,6 +155,27 @@ endpoints are scoped to the caller's own rows.
 |---|---|---|
 | `GET` | `/api/backtests/` | The caller's recorded `BacktestRun` metrics (newest first, max 100). Runs recorded **without an owner are not returned** — runs never leak across accounts. Engine-computed metrics only; never fabricated (audit CRIT-01). |
 
+### Backtest execution & reporting (Phase 11G)
+
+All endpoints require authentication and are **owner-scoped**: a run is only ever visible to its
+owner (cross-user ids answer **404**, never a disclosure). Validation failures answer **400**;
+a per-user cap of 10 active (`queued`/`running`) runs answers **429**. A metric the recorded trades
+cannot support is `null` on the wire — never a fabricated `0`.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/backtests/config/` | Default configuration + valid ranges (symbol, timeframe ∈ {M1,M5,M15,H1}, count 40–20000, initial_balance, risk_pct, spread/commission/slippage, sl/tp, max_daily_loss, max_drawdown_pct, walk-forward sizes). |
+| `POST` | `/api/backtests/runs/` | Validate config, create a `BacktestRun` (status `queued`) and enqueue the Celery `heavy`-queue task. Answers **202** with `{run}`. |
+| `GET` | `/api/backtests/runs/` | The caller's runs (newest first, max 100): `{count, runs}`. |
+| `GET` | `/api/backtests/runs/<uuid>/` | Run detail (`{run}`) incl. `status`, `error`, `config`, `metrics`, `data_source`, `is_walk_forward`, timestamps. |
+| `GET` | `/api/backtests/runs/<uuid>/trades/` | Stored simulated trades (`{count, trades}`): side, times, entry/exit/SL/TP, lots, result, pnl, realized R, duration, exit reason, session, weekday. |
+| `GET` | `/api/backtests/runs/<uuid>/metrics/` | §6 metrics (`{metrics, status}`): win rate, avg R, gross/net profit, profit factor (`null` + note when undefined), expectancy, max drawdown (+%), avg duration, consecutive streaks, by session/weekday/setup type, and the `assumptions` block. |
+| `GET` | `/api/backtests/runs/<uuid>/equity/` | Equity/balance curve (`{points:[{time, equity, balance, drawdown}]}`). |
+| `GET` | `/api/backtests/runs/<uuid>/export/?format=csv\|json` | Recorded trades as `text/csv` (attachment) or a JSON document `{run, trades}`. |
+
+> Backtests are **simulated** historical evaluations of the deterministic strategy. No endpoint
+> places, schedules or manages any broker order — the platform is analysis-only.
+
 ### WebSocket (Phase 10 — read-only operational status)
 
 | Protocol | Path | Notes |
@@ -167,7 +188,7 @@ endpoints are scoped to the caller's own rows.
 |---|---|
 | `GET/PATCH` `/api/auth/me/profile/` | Update user profile/settings (e.g. `display_timezone`) |
 | Password reset | Not implemented; out of scope for the current phases (audit L-07) |
-| `POST /api/backtests/` | Run/schedule a backtest over HTTP (the engine exists; only read-only history is exposed in 11F) |
-| Backtest equity curve | Per-run trade list / equity series (metrics are summarized today) |
+| Forward-testing API | Phase 11G §8 forward-testing engine + dashboard (WS4) — not yet implemented |
+| MT5 symbol metadata | Phase 11G §2 symbol-metadata endpoint (WS1) — not yet implemented |
 
 > Each phase updates this file in the same commit as the endpoints it adds.

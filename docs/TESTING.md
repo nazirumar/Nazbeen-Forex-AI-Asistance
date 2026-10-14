@@ -9,7 +9,7 @@
 ## Frontend test suite (Phase 11D, extended in 11E)
 
 `frontend/` now has its own unit/integration suite: **Vitest 5 + Testing Library + jsdom**,
-run with `npm test` (`vitest run`). 111 tests across 11 files in `frontend/test/`, covering:
+run with `npm test` (`vitest run`). 124 tests across 13 files in `frontend/test/`, covering:
 
 - `api.test.ts` — token attachment, DRF error extraction (detail/fields/details[]), 401 →
   token cleared + `nazbeen:auth-expired` event (with credential-path exemption), FormData
@@ -45,6 +45,15 @@ run with `npm test` (`vitest run`). 111 tests across 11 files in `frontend/test/
   premium/discount midpoint lines, and setup Entry/SL/TP lines emitted **only** for a
   `complete` setup with finite values (otherwise `[]`); unparseable events are dropped, never
   guessed.
+- `backtests-analytics.test.tsx` **(11G)** — backtest table renders recorded metrics, a `null`
+  metric is "—" (never 0), honest empty/error states; analytics renders the aggregate + sample
+  sizes, `null` → "—", empty state, and export clicks hit the real
+  `/api/journal/export/?format=csv` path.
+- `mentor-settings.test.tsx` **(11G)** — mentor posts the question to `/api/mentor/ask/` and
+  renders the returned answer verbatim, never sends an empty question, surfaces errors without
+  inventing an answer; settings renders `/api/auth/me/` and carries the explicit read-only note.
+- `shell.test.tsx` **(11G update)** — the sidebar navigation assertion now includes the four new
+  targets (`/dashboard/{backtests,analytics,mentor,settings}`).
 
 Notes:
 

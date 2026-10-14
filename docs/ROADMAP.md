@@ -18,7 +18,7 @@
 | 8 | Journal & analytics | Journal records, outcome evaluation, performance reports | complete (journal extended in 11F) |
 | 9 | Frontend | Next.js dashboard, charts, WS updates, all screens | complete |
 | 10 | Infra & ops | Docker Compose, Channels, Celery/Redis, structured logging, e2e, hardening | complete (Docker/CI verification blocked — see 11F report) |
-| 11 | Audit remediation & advanced ICT/SMC | WS-A–WS-F: correctness/safety batches, frontend MVP, detectors + LangGraph, journal/analytics, infra errata | 11A–11E complete; **11F in progress** |
+| 11 | Audit remediation & advanced ICT/SMC | WS-A–WS-F: correctness/safety batches, frontend MVP, detectors + LangGraph, journal/analytics, infra errata; 11G: remaining dashboard pages (backtests/analytics/mentor/settings) + Docker/CI verification | 11A–11F complete; **11G in progress** |
 
 > Authoritative phase state lives in `docs/PROJECT_PROGRESS.md`; per-phase evidence lives in
 > `docs/PHASE_REPORTS/`.

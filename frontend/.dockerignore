@@ -1,0 +1,20 @@
+# Build-context exclusions for the frontend image (Phase 11G / M-11).
+#
+# The compose `frontend` service builds with `context: ./frontend`, so the
+# repository-root `.dockerignore` does NOT apply here. Without this file the
+# context includes node_modules/.next (hundreds of MB) and the build stalls.
+# Source, package.json and package-lock.json are all that the image needs.
+
+node_modules/
+.next/
+out/
+coverage/
+.vitest/
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+.DS_Store

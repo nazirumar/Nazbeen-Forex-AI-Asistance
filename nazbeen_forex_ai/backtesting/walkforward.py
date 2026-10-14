@@ -53,12 +53,21 @@ def walk_forward(
     test_size: int = 100,
     step: int = 100,
     strategy: Callable[[List[Dict[str, Any]]], str] | None = None,
+    **run_kwargs: Any,
 ) -> WalkForwardResult:
+    """Chronological walk-forward evaluation.
+
+    ``run_kwargs`` (Phase 11G) are forwarded verbatim to every
+    :func:`~nazbeen_forex_ai.backtesting.engine.run_backtest` call so callers can
+    apply the same spread/slippage/commission assumptions and position sizing to
+    the out-of-sample windows as to a single-run backtest. Defaults are unchanged,
+    so existing callers keep the previous behaviour exactly.
+    """
     _validate_chronological(candles)
     windows: List[Dict[str, Any]] = []
     all_trades: List[Any] = []
     if len(candles) < train_size + test_size:
-        res = run_backtest(candles, strategy=strategy)
+        res = run_backtest(candles, strategy=strategy, **run_kwargs)
         # P-02: train == test on the same bars is NOT out-of-sample evidence.
         note = (
             f"insufficient data ({len(candles)} candles < train_size {train_size} + "
@@ -78,7 +87,7 @@ def walk_forward(
     for i in range(0, len(candles) - train_size - test_size + 1, step):
         train = candles[i : i + train_size]
         test = candles[i + train_size : i + train_size + test_size]
-        res_test = run_backtest(test, strategy=strategy)
+        res_test = run_backtest(test, strategy=strategy, **run_kwargs)
         windows.append(
             {
                 "train_range": [i, i + train_size],

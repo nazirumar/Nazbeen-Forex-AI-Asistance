@@ -99,6 +99,14 @@ def summarize_trades(trades: List[Trade]) -> BacktestResult:
     return result
 
 
+def _utc_date(value: Any):
+    """Calendar date (UTC) of a timestamp-like value, or ``None``."""
+    try:
+        return value.date()
+    except Exception:
+        return None
+
+
 def run_backtest(
     candles: List[Dict[str, Any]],
     commission_pips: float = 0.0,
@@ -111,7 +119,21 @@ def run_backtest(
     contract_size: float = 100000.0,
     lots: float = 1.0,
     min_bars: int = 30,
+    initial_balance: float = 0.0,
+    max_daily_loss: float = 0.0,
+    max_drawdown_pct: float = 0.0,
 ) -> BacktestResult:
+    """Simulate the strategy bar-by-bar over ``candles`` (chronological).
+
+    ``initial_balance``/``max_daily_loss``/``max_drawdown_pct`` (Phase 11G) add
+    optional portfolio stops. Each is **disabled at its default of 0**, so
+    existing callers are unaffected:
+
+    - ``max_daily_loss`` (absolute currency): once a UTC day's realized P&L is at
+      or below ``-max_daily_loss``, no further entries are taken that day.
+    - ``max_drawdown_pct`` (requires ``initial_balance`` > 0): trading stops
+      entirely once equity drawdown from the running peak reaches the percentage.
+    """
     if not candles:
         return BacktestResult()
     df = candles_to_df(candles)
@@ -132,6 +154,9 @@ def run_backtest(
     closes = df["close"].astype(float).tolist()
 
     trades: List[Trade] = []
+    realized = 0.0
+    peak_equity = initial_balance if initial_balance > 0.0 else 0.0
+    daily_pnl: Dict[Any, float] = {}
     i = min_bars
     while i < n - 1:
         window = candles[:i]  # strictly before bar i — no look-ahead
@@ -139,6 +164,17 @@ def run_backtest(
         if decision not in ("BUY", "SELL"):
             i += 1
             continue
+
+        # --- Portfolio stops (Phase 11G). Disabled when the limit is 0. ---
+        if max_drawdown_pct > 0.0 and initial_balance > 0.0:
+            equity = initial_balance + realized
+            if (peak_equity - equity) / initial_balance * 100.0 >= max_drawdown_pct:
+                break  # drawdown limit reached: stop opening new trades
+        if max_daily_loss > 0.0:
+            entry_day = _utc_date(times[i])
+            if daily_pnl.get(entry_day, 0.0) <= -abs(max_daily_loss):
+                i += 1  # daily loss limit reached: skip entries until next day
+                continue
 
         side = "LONG" if decision == "BUY" else "SHORT"
         raw_entry = opens[i]
@@ -217,6 +253,11 @@ def run_backtest(
                 spread_cost=spread_price,
             )
         )
+        realized += pnl
+        exit_day = _utc_date(exit_time)
+        daily_pnl[exit_day] = daily_pnl.get(exit_day, 0.0) + pnl
+        if initial_balance > 0.0:
+            peak_equity = max(peak_equity, initial_balance + realized)
         i = max(exit_i, i + 1)
 
     return summarize_trades(trades)

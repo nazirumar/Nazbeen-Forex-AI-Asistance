@@ -269,3 +269,42 @@ found login answered `400` on bad credentials. WS-E also asked for backtest-hist
   recorded as blocked, never claimed as verified.
 - `URL_FORMAT_OVERRIDE = None` is a deliberate global change; any future endpoint wanting DRF
   format negotiation must re-enable it explicitly.
+
+---
+
+## ADR-014 — Phase 11G dashboard pages consume existing endpoints; frontend build-context fix
+
+**Status:** Accepted
+**Date:** 2026-10-14
+
+### Context
+
+Phase 11 P2.5 listed dashboard surfaces that were still missing after 11D: backtest results,
+journal analytics, the AI-mentor chat and account settings. The owner also asked to attempt the
+long-blocked Docker build/run and GitHub-CI verification (audit M-11/M-13).
+
+### Decision
+
+1. **No new backend endpoints.** Every Phase 11G page reads an endpoint that already exists and is
+   owner-scoped server-side: `GET /api/backtests/`, `GET /api/journal/performance/`,
+   `GET /api/journal/export/?format=csv|json`, `POST /api/mentor/ask/`, `GET /api/auth/me/`. The
+   frontend adds no derived statistics and invents no fields.
+2. **Honesty rules carried into the UI.** A `null` metric renders as "—", never as 0; the
+   performance `note` and the sample sizes (`pnl_sample`/`rr_sample`) are shown with the figures;
+   the mentor renders the backend answer verbatim and never fabricates one.
+3. **The settings page is read-only by design.** There is no account-update endpoint, so no fake
+   "save" control is shown — the page states plainly that editing is unavailable.
+4. **`frontend/.dockerignore` is required.** The compose `frontend` service builds with
+   `context: ./frontend`, so the repository-root `.dockerignore` does not apply; without a
+   `frontend/.dockerignore` the build context shipped `node_modules`/`.next` (536 MB) and stalled.
+   The file now excludes those (audit M-11: "frontend missing `.dockerignore` entries").
+5. **Container verification is attempted, and reported honestly.** Starting the daemon and running
+   a build is not the same as a passing, deployable stack: whatever the environment permits is
+   recorded with its real outcome, and anything that cannot be run stays marked **blocked**.
+
+### Consequences
+
+- P2.5 dashboard surfaces are complete; `next build` compiles 15 routes (was 11).
+- Docker/CI status is evidence-based (see `docs/PHASE_REPORTS/PHASE_11G.md`): the GitHub Actions
+  run for the 11F push is checked directly; the image build is attempted against a live daemon.
+- No live-trading, MT5 or LLM behaviour is enabled by this phase.

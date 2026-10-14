@@ -149,6 +149,10 @@ describe("Sidebar (mobile drawer + desktop collapse)", () => {
       "/dashboard/analysis",
       "/dashboard/history",
       "/dashboard/journal",
+      "/dashboard/backtests",
+      "/dashboard/analytics",
+      "/dashboard/mentor",
+      "/dashboard/settings",
     ]);
     expect(screen.getByText("Chart").closest("a")?.getAttribute("aria-current")).toBe("page");
   });

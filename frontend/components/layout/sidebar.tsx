@@ -65,6 +65,46 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    href: "/dashboard/backtests",
+    label: "Backtests",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden>
+        <path d="M4 19V5" />
+        <path d="M4 19h16" />
+        <path d="M8 15l3-4 3 2 4-6" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/analytics",
+    label: "Analytics",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden>
+        <path d="M5 20V10M12 20V4M19 20v-7" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/mentor",
+    label: "AI Mentor",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden>
+        <path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3z" />
+        <path d="M9 22h6" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/settings",
+    label: "Settings",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z" />
+      </svg>
+    ),
+  },
 ];
 
 export function Sidebar({
